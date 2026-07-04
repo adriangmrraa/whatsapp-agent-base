@@ -1,6 +1,10 @@
+"use server";
+
 import { db } from "@/db";
 import { orders, leads, conversations } from "@/db/schema";
 import { sql, eq, desc, gte, lt, and, or } from "drizzle-orm";
+import { auth } from "@/auth";
+import { revalidatePath } from "next/cache";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -314,4 +318,110 @@ export async function getActionCardsAction(): Promise<ActionCard[]> {
   }
 
   return cards;
+}
+
+// ─── Order Server Actions ──────────────────────────────────────────────────
+
+function isCashOnDelivery(paymentMethod: string | null): boolean {
+  if (!paymentMethod) return true;
+  const cashMethods = [
+    "efectivo",
+    "contra entrega",
+    "en efectivo",
+    "al recibir",
+    "cash",
+    "cash_on_delivery",
+  ];
+  return cashMethods.includes(paymentMethod.toLowerCase().trim());
+}
+
+export async function markOrderDeliveredAction(
+  orderId: number,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session) return { success: false, error: "No autorizado" };
+
+  try {
+    const [order] = await db
+      .select({
+        paymentMethod: orders.paymentMethod,
+        paymentStatus: orders.paymentStatus,
+      })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) return { success: false, error: "Pedido no encontrado" };
+
+    const isCod =
+      isCashOnDelivery(order.paymentMethod) &&
+      order.paymentStatus === "pending";
+
+    await db
+      .update(orders)
+      .set({
+        status: "delivered",
+        deliveredAt: new Date(),
+        updatedAt: new Date(),
+        ...(isCod ? { paymentStatus: "paid" } : {}),
+      })
+      .where(eq(orders.id, orderId));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error al marcar como entregado" };
+  }
+}
+
+export async function markOrderReadyAction(
+  orderId: number,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session) return { success: false, error: "No autorizado" };
+
+  try {
+    await db
+      .update(orders)
+      .set({ status: "ready", updatedAt: new Date() })
+      .where(eq(orders.id, orderId));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error al marcar como listo" };
+  }
+}
+
+export async function markOrderPaidAction(
+  orderId: number,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session) return { success: false, error: "No autorizado" };
+
+  try {
+    const [order] = await db
+      .select({ status: orders.status })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) return { success: false, error: "Pedido no encontrado" };
+
+    const advanceStatus = order.status === "pending" ? ("preparing" as const) : undefined;
+
+    await db
+      .update(orders)
+      .set({
+        paymentStatus: "paid",
+        updatedAt: new Date(),
+        ...(advanceStatus ? { status: advanceStatus } : {}),
+      })
+      .where(eq(orders.id, orderId));
+
+    revalidatePath("/admin");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error al marcar como pagado" };
+  }
 }

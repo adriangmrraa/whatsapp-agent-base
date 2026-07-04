@@ -2,6 +2,9 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition, useState } from "react";
+import { toast } from "sonner";
 import {
   ShoppingCartIcon,
   DollarSignIcon,
@@ -11,10 +14,26 @@ import {
   ClockIcon,
   MessageSquareIcon,
   AlertTriangleIcon,
+  Loader2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { staggerContainer, cardEntrance, fadeUpSmall } from "@/lib/animations";
 import type { DashboardCard } from "./page";
 import type { ActivityItem, ActionCard, ActionCardItem } from "./dashboard-actions";
+import {
+  markOrderDeliveredAction,
+  markOrderReadyAction,
+  markOrderPaidAction,
+} from "./dashboard-actions";
 
 // ─── Icon map ─────────────────────────────────────────────────────────────────
 
@@ -155,74 +174,187 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
 // ─── Action Card ──────────────────────────────────────────────────────────────
 
+const NAV_ACTIONS = new Set(["open-chat", "view-lead"]);
+const ORDER_ACTIONS = new Set(["mark-delivered", "mark-ready", "mark-paid"]);
+
 const ACTION_HREF: Record<string, (item: ActionCardItem) => string> = {
-  "mark-delivered": () => "/admin/orders",
-  "mark-ready": () => "/admin/orders",
-  "mark-paid": () => "/admin/orders",
-  "open-chat": (item) => item.conversationId ? `/admin/conversations/${item.conversationId}` : "/admin/conversations",
+  "open-chat": (item) =>
+    item.conversationId
+      ? `/admin/conversations/${item.conversationId}`
+      : "/admin/conversations",
   "view-lead": () => "/admin/conversations",
 };
 
 function ActionCardComponent({ card }: { card: ActionCard }) {
   const styles = CARD_STYLES[card.color] ?? CARD_STYLES.red;
   const Icon = ACTION_ICON_MAP[card.icon] || AlertTriangleIcon;
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [confirmInfo, setConfirmInfo] = useState<{
+    item: ActionCardItem;
+    actionKey: string;
+    actionLabel: string;
+  } | null>(null);
+
+  const handleConfirm = () => {
+    if (!confirmInfo) return;
+    const { item, actionKey } = confirmInfo;
+
+    startTransition(async () => {
+      let result: { success: boolean; error?: string };
+
+      switch (actionKey) {
+        case "mark-delivered":
+          result = await markOrderDeliveredAction(Number(item.orderId));
+          break;
+        case "mark-ready":
+          result = await markOrderReadyAction(Number(item.orderId));
+          break;
+        case "mark-paid":
+          result = await markOrderPaidAction(Number(item.orderId));
+          break;
+        default:
+          return;
+      }
+
+      setConfirmInfo(null);
+
+      if (result.success) {
+        toast.success("Pedido actualizado");
+        router.refresh();
+      } else {
+        toast.error(result.error || "Error al actualizar");
+      }
+    });
+  };
 
   return (
-    <motion.div
-      variants={cardEntrance}
-      className={`rounded-xl border ${styles.border} ${styles.bg} overflow-hidden`}
-    >
-      {/* Header */}
-      <div className="px-4 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="flex items-center gap-2">
-          <Icon className="size-4" />
-          <h3 className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-            {card.title}
-          </h3>
-        </div>
-        <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
-          {card.items.length} pendiente{card.items.length !== 1 ? "s" : ""}
-        </p>
-      </div>
-
-      {/* Items */}
-      <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-        {card.items.map((item) => {
-          return (
-            <div
-              key={item.id}
-              className="px-4 py-2.5 flex items-center justify-between gap-2"
+    <>
+      <motion.div
+        variants={cardEntrance}
+        className={`rounded-xl border ${styles.border} ${styles.bg} overflow-hidden`}
+      >
+        {/* Header */}
+        <div
+          className="px-4 py-3 border-b"
+          style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Icon className="size-4" />
+            <h3
+              className="text-sm font-semibold"
+              style={{ color: "rgba(255,255,255,0.9)" }}
             >
-              <div className="min-w-0 flex-1">
-                <p
-                  className="text-[13px] font-medium truncate"
-                  style={{ color: "rgba(255,255,255,0.8)" }}
-                >
-                  {item.label}
-                </p>
-                <p className="text-[11px] truncate" style={{ color: "rgba(255,255,255,0.3)" }}>
-                  {item.subtitle}
-                </p>
+              {card.title}
+            </h3>
+          </div>
+          <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
+            {card.items.length} pendiente{card.items.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+
+        {/* Items */}
+        <div
+          className="divide-y"
+          style={{ borderColor: "rgba(255,255,255,0.04)" }}
+        >
+          {card.items.map((item) => {
+            return (
+              <div
+                key={item.id}
+                className="px-4 py-2.5 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="text-[13px] font-medium truncate"
+                    style={{ color: "rgba(255,255,255,0.8)" }}
+                  >
+                    {item.label}
+                  </p>
+                  <p
+                    className="text-[11px] truncate"
+                    style={{ color: "rgba(255,255,255,0.3)" }}
+                  >
+                    {item.subtitle}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {card.actions.map((action) => {
+                    // Navigation actions — keep as Link
+                    if (NAV_ACTIONS.has(action.action)) {
+                      const href = ACTION_HREF[action.action]?.(item);
+                      return (
+                        <Link
+                          key={action.action}
+                          href={href ?? "#"}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${styles.btn} ${styles.btnHover} flex items-center gap-1.5 no-underline`}
+                        >
+                          {action.label}
+                        </Link>
+                      );
+                    }
+
+                    // Order actions — AlertDialog confirmation
+                    if (ORDER_ACTIONS.has(action.action)) {
+                      return (
+                        <button
+                          key={action.action}
+                          type="button"
+                          onClick={() =>
+                            setConfirmInfo({
+                              item,
+                              actionKey: action.action,
+                              actionLabel: action.label,
+                            })
+                          }
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${styles.btn} ${styles.btnHover} flex items-center gap-1.5 cursor-pointer`}
+                        >
+                          {action.label}
+                        </button>
+                      );
+                    }
+
+                    return null;
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {card.actions.map((action) => {
-                  const href = ACTION_HREF[action.action]?.(item);
-                  return (
-                    <Link
-                      key={action.action}
-                      href={href ?? "#"}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${styles.btn} ${styles.btnHover} flex items-center gap-1.5 no-underline`}
-                    >
-                      {action.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </motion.div>
+            );
+          })}
+        </div>
+      </motion.div>
+
+      {/* Confirmation dialog */}
+      <AlertDialog
+        open={!!confirmInfo}
+        onOpenChange={(open) => {
+          if (!open && !isPending) setConfirmInfo(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar acci&oacute;n</AlertDialogTitle>
+            <AlertDialogDescription>
+              &iquest;Marcar{" "}
+              {confirmInfo?.actionLabel?.toLowerCase() ?? ""} para
+              pedido #{confirmInfo?.item?.orderId ?? ""}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isPending}
+              onClick={handleConfirm}
+              className="gap-1.5"
+            >
+              {isPending && <Loader2 className="size-3 animate-spin" />}
+              {isPending ? "Procesando\u2026" : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
