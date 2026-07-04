@@ -4,8 +4,15 @@ import { verifyYCloudSignature } from "@/lib/ycloud/webhook";
 import { addToBuffer } from "@/lib/ycloud/buffer";
 import { storeMedia } from "@/lib/ycloud/media";
 import { captureOrUpdateLead } from "@/lib/ycloud/lead";
-import { getOrCreateConversation, saveMessage } from "@/lib/ycloud/conversation";
+import {
+  getOrCreateConversation,
+  loadConversation,
+  saveMessage,
+} from "@/lib/ycloud/conversation";
 import { normalizePhone } from "@/lib/ycloud/phone";
+import { sendText, sendImage, sendDocument } from "@/lib/ycloud";
+import logger from "@/lib/logger";
+import { runWhatsAppAgent } from "@/lib/whatsapp/agent";
 import type {
   YCloudWebhookEvent,
   YCloudInboundMessage,
@@ -208,12 +215,61 @@ async function processInboundMessage(
       });
 
       addToBuffer(phone, content, async (_phone, combinedText) => {
-        console.log(
-          "[webhook:buffer] Flush for %s: %s",
-          _phone,
-          combinedText.slice(0, 120),
+        logger.info(
+          { phone: _phone },
+          "[webhook:buffer] Flush — calling WhatsApp agent",
         );
-        // Future: wire the AI pipeline here.
+
+        try {
+          // 1. Load conversation context from DB
+          const convMessages = await loadConversation(conversationId);
+
+          // Build messages array: full history + latest combined user text
+          const agentMessages: Array<{
+            role: "user" | "assistant";
+            content: string;
+          }> = [
+            ...convMessages.map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            })),
+            { role: "user", content: combinedText },
+          ];
+
+          // 2. Run the WhatsApp agent
+          const result = await runWhatsAppAgent({
+            conversationId,
+            customerPhone: _phone,
+            messages: agentMessages,
+          });
+
+          // 3. Send response text
+          const textResult = await sendText(_phone, result.text);
+          if (!textResult.ok) {
+            logger.error(
+              { error: textResult.error },
+              "[webhook:buffer] Failed to send text response",
+            );
+          }
+
+          // 4. Send any pending media after the text
+          for (const media of result.pendingMedia) {
+            if (media.type === "image") {
+              await sendImage(_phone, media.url, media.caption);
+            } else if (media.type === "document") {
+              await sendDocument(_phone, media.url, media.caption);
+            }
+            // Small delay between media messages to respect rate limits
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+
+          logger.info(
+            { phone: _phone, textLength: result.text.length, mediaCount: result.pendingMedia.length },
+            "[webhook:buffer] Flush complete",
+          );
+        } catch (error) {
+          logger.error({ error }, "[webhook:buffer] Flush handler error");
+        }
       });
     } else {
       // ── Media message (image / audio / document / video / sticker) ────
