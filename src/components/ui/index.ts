@@ -12,6 +12,10 @@ export {
 
 export { Input } from "./input"
 
+export { Label } from "./label"
+
+export { Textarea } from "./textarea"
+
 export { Badge, badgeVariants } from "./badge"
 export type { BadgeProps } from "./badge"
 
