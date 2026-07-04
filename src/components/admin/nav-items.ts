@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Bot,
   BarChart3,
+  Percent,
   type LucideIcon,
 } from "lucide-react"
 
@@ -45,6 +46,12 @@ export const navItems: NavItem[] = [
     label: "Orders",
     href: "/admin/orders",
     icon: ShoppingCart,
+    disabled: false,
+  },
+  {
+    label: "Promotions",
+    href: "/admin/promotions",
+    icon: Percent,
     disabled: false,
   },
   {
