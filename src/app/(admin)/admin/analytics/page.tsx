@@ -1,14 +1,36 @@
-export default function AnalyticsPage() {
+import { getOrdersTimeSeries, getRevenueStats, getLeadConversionStats, getTopProducts } from "./actions";
+import { AnalyticsClient } from "./analytics-client";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Analytics — WhatsApp Business Base",
+};
+
+interface Props {
+  searchParams: Promise<{
+    days?: string;
+  }>;
+}
+
+export default async function AnalyticsPage({ searchParams }: Props) {
+  const params = await searchParams;
+  const days = params.days === "30" ? 30 : 7;
+
+  const [timeSeries, revenueStats, leadConversion, topProducts] = await Promise.all([
+    getOrdersTimeSeries(days),
+    getRevenueStats(),
+    getLeadConversionStats(),
+    getTopProducts(5),
+  ]);
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-6 min-h-[60vh]">
-      <div className="text-center space-y-3">
-        <h1 className="text-2xl font-bold" style={{ color: "rgba(255,255,255,0.9)" }}>
-          Analytics
-        </h1>
-        <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
-          Próximamente — métricas, gráficos y reportes del negocio.
-        </p>
-      </div>
-    </div>
+    <AnalyticsClient
+      days={days}
+      timeSeries={timeSeries}
+      revenueStats={revenueStats}
+      leadConversion={leadConversion}
+      topProducts={topProducts}
+    />
   );
 }
