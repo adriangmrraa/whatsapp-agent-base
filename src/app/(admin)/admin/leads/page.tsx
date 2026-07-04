@@ -1,14 +1,35 @@
-export default function LeadsPage() {
+import { fetchLeadsAction, type LeadStatus } from "./actions";
+import { LeadsClient } from "./leads-client";
+
+export const metadata = { title: "Leads — WhatsApp Business Base" };
+
+interface LeadsPageProps {
+  searchParams: Promise<{ status?: string; page?: string; q?: string }>;
+}
+
+const VALID_STATUSES: LeadStatus[] = ["new", "contacted", "converted", "lost"];
+
+export default async function LeadsPage({ searchParams }: LeadsPageProps) {
+  const params = await searchParams;
+
+  const status =
+    params.status && VALID_STATUSES.includes(params.status as LeadStatus)
+      ? (params.status as LeadStatus)
+      : undefined;
+
+  const page = Math.max(1, parseInt(params.page ?? "1", 10));
+  const q = params.q?.trim() || undefined;
+
+  const result = await fetchLeadsAction({ status, page, q });
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-6 min-h-[60vh]">
-      <div className="text-center space-y-3">
-        <h1 className="text-2xl font-bold" style={{ color: "rgba(255,255,255,0.9)" }}>
-          Leads
-        </h1>
-        <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
-          Próximamente — gestión de leads con perfil, tags y seguimiento.
-        </p>
-      </div>
-    </div>
+    <LeadsClient
+      initialLeads={result.leads}
+      initialTotalPages={result.totalPages}
+      initialCounts={result.countsByStatus}
+      currentStatus={status ?? ""}
+      currentPage={page}
+      currentQ={q ?? ""}
+    />
   );
 }
