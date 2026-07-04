@@ -169,6 +169,7 @@ export async function updateLeadAction(
   id: number,
   data: {
     name?: string;
+    phone?: string;
     email?: string;
     address?: string;
     notes?: string;
@@ -177,6 +178,7 @@ export async function updateLeadAction(
 ) {
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
+  if (data.phone !== undefined) updateData.phone = data.phone;
   if (data.email !== undefined) updateData.email = data.email;
   if (data.address !== undefined) updateData.address = data.address;
   if (data.notes !== undefined) updateData.notes = data.notes;

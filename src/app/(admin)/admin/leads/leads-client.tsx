@@ -226,6 +226,7 @@ export function LeadsClient({
     try {
       await updateLeadAction(selectedLead.id, {
         name: editName || undefined,
+        phone: editPhone || undefined,
         email: editEmail || undefined,
         notes: editNotes || undefined,
         status: editStatus,
