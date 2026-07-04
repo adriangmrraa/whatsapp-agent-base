@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { LogOut, Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { navItems } from "./nav-items";
@@ -165,7 +166,13 @@ export default function AdminTopbar({ user }: TopbarProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={async () => {
+              try {
+                await signOut({ callbackUrl: "/login" });
+              } catch {
+                toast.error("Error al cerrar sesión. Intentá de nuevo.");
+              }
+            }}
             title="Cerrar sesión"
             className="text-muted-foreground hover:text-foreground"
           >

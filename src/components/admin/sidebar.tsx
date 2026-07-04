@@ -43,12 +43,9 @@ export default function AdminSidebar() {
 
   if (!mounted) {
     return (
-      <aside
-        className="hidden w-64 flex-col border-r lg:flex transition-all duration-300 ease-in-out"
-        style={{ backgroundColor: "#111111", borderColor: "rgba(255,255,255,0.08)" }}
-      >
-        <div className="flex h-14 items-center px-6 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-          <span className="text-base font-black tracking-tight" style={{ color: "rgba(255,255,255,0.9)" }}>
+      <aside className="hidden w-64 flex-col border-r border-border lg:flex transition-all duration-300 ease-in-out bg-card">
+        <div className="flex h-14 items-center px-6 border-b border-border">
+          <span className="text-base font-black tracking-tight text-foreground">
             WBB
           </span>
         </div>
@@ -59,23 +56,21 @@ export default function AdminSidebar() {
   return (
     <aside
       className={cn(
-        "hidden flex-col border-r lg:flex transition-all duration-300 ease-in-out",
+        "hidden flex-col border-r border-border lg:flex transition-all duration-300 ease-in-out bg-card",
         collapsed ? "w-16" : "w-64"
       )}
-      style={{ backgroundColor: "#111111", borderColor: "rgba(255,255,255,0.08)" }}
     >
       {/* Brand */}
       <Link
         href="/admin"
-        className="flex h-14 items-center border-b shrink-0"
-        style={{ borderColor: "rgba(255,255,255,0.08)", padding: collapsed ? "0 1rem" : "0 1.5rem" }}
+        className="flex h-14 items-center border-b border-border shrink-0 text-foreground"
+        style={{ padding: collapsed ? "0 1rem" : "0 1.5rem" }}
       >
         <AnimatePresence mode="wait">
           {collapsed ? (
             <motion.span
               key="collapsed-brand"
               className="text-lg font-black tracking-tight w-full text-center"
-              style={{ color: "rgba(255,255,255,0.9)" }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -87,7 +82,6 @@ export default function AdminSidebar() {
             <motion.span
               key="expanded-brand"
               className="text-base font-black tracking-tight"
-              style={{ color: "rgba(255,255,255,0.9)" }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -115,29 +109,11 @@ export default function AdminSidebar() {
                   className={cn(
                     "group relative flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                     collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
                     item.disabled && "pointer-events-none opacity-40"
                   )}
-                  style={
-                    active
-                      ? {
-                          backgroundColor: "rgba(255,255,255,0.1)",
-                          color: "#ffffff",
-                        }
-                      : { color: "rgba(255,255,255,0.4)" }
-                  }
-                  onMouseEnter={(e) => {
-                    if (!active && !item.disabled) {
-                      e.currentTarget.style.backgroundColor =
-                        "rgba(255,255,255,0.05)";
-                      e.currentTarget.style.color = "rgba(255,255,255,0.8)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active && !item.disabled) {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.color = "rgba(255,255,255,0.4)";
-                    }
-                  }}
                 >
                   <Icon className="size-4 shrink-0" />
                   <AnimatePresence mode="wait">
@@ -175,14 +151,10 @@ export default function AdminSidebar() {
       </ScrollArea>
 
       {/* Collapse toggle */}
-      <div
-        className="flex shrink-0 items-center justify-center p-2 border-t"
-        style={{ borderColor: "rgba(255,255,255,0.08)" }}
-      >
+      <div className="flex shrink-0 items-center justify-center p-2 border-t border-border">
         <button
           onClick={toggleCollapsed}
-          className="flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-white/10"
-          style={{ color: "rgba(255,255,255,0.4)" }}
+          className="flex items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-accent text-muted-foreground hover:text-accent-foreground"
           aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
         >
           {collapsed ? (

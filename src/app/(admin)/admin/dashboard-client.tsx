@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import {
   ShoppingCartIcon,
   DollarSignIcon,
@@ -156,49 +155,17 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
 // ─── Action Card ──────────────────────────────────────────────────────────────
 
-function ActionCardComponent({
-  card,
-  router,
-}: {
-  card: ActionCard;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const [loadingItems, setLoadingItems] = useState<Record<string, Record<string, boolean>>>({});
+const ACTION_HREF: Record<string, (item: ActionCardItem) => string> = {
+  "mark-delivered": () => "/admin/orders",
+  "mark-ready": () => "/admin/orders",
+  "mark-paid": () => "/admin/orders",
+  "open-chat": (item) => item.conversationId ? `/admin/conversations/${item.conversationId}` : "/admin/conversations",
+  "view-lead": () => "/admin/conversations",
+};
+
+function ActionCardComponent({ card }: { card: ActionCard }) {
   const styles = CARD_STYLES[card.color] ?? CARD_STYLES.red;
   const Icon = ACTION_ICON_MAP[card.icon] || AlertTriangleIcon;
-
-  async function handleAction(itemId: string | number, action: string, item: ActionCardItem) {
-    const key = `${itemId}-${action}`;
-    setLoadingItems((prev) => ({
-      ...prev,
-      [itemId]: { ...(prev[itemId] || {}), [action]: true },
-    }));
-
-    try {
-      switch (action) {
-        case "open-chat":
-          if (item.conversationId) {
-            router.push(`/admin/conversations/${item.conversationId}`);
-          }
-          break;
-        case "view-lead":
-          if (item.phone) {
-            router.push(`/admin/clients/${encodeURIComponent(item.phone)}`);
-          }
-          break;
-        default:
-          console.warn(`[dashboard] Unhandled action: ${action}`);
-      }
-      router.refresh();
-    } catch (err) {
-      console.warn(`[dashboard] Action ${action} failed:`, err);
-    } finally {
-      setLoadingItems((prev) => ({
-        ...prev,
-        [itemId]: { ...(prev[itemId] || {}), [action]: false },
-      }));
-    }
-  }
 
   return (
     <motion.div
@@ -221,7 +188,6 @@ function ActionCardComponent({
       {/* Items */}
       <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         {card.items.map((item) => {
-          const itemLoading = loadingItems[item.id] || {};
           return (
             <div
               key={item.id}
@@ -239,19 +205,18 @@ function ActionCardComponent({
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {card.actions.map((action) => (
-                  <button
-                    key={action.action}
-                    onClick={() => handleAction(item.id, action.action, item)}
-                    disabled={itemLoading[action.action]}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${styles.btn} ${styles.btnHover} disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5`}
-                  >
-                    {itemLoading[action.action] && (
-                      <span className="inline-block size-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    )}
-                    {action.label}
-                  </button>
-                ))}
+                {card.actions.map((action) => {
+                  const href = ACTION_HREF[action.action]?.(item);
+                  return (
+                    <Link
+                      key={action.action}
+                      href={href ?? "#"}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${styles.btn} ${styles.btnHover} flex items-center gap-1.5 no-underline`}
+                    >
+                      {action.label}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           );
@@ -270,7 +235,6 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ cards, activity, actionCards }: DashboardClientProps) {
-  const router = useRouter();
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -363,7 +327,7 @@ export function DashboardClient({ cards, activity, actionCards }: DashboardClien
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {actionCards.map((card) => (
-                  <ActionCardComponent key={card.id} card={card} router={router} />
+                  <ActionCardComponent key={card.id} card={card} />
                 ))}
               </div>
             </motion.div>
