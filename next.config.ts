@@ -7,9 +7,6 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.cloudinary.com" },
     ],
   },
-  experimental: {
-    nodeMiddleware: true,
-  },
 };
 
 export default nextConfig;
