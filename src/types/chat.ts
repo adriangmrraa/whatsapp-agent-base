@@ -8,6 +8,8 @@ export interface ConversationSummary {
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
   unreadCount?: number;
+  messageCount?: number;
+  humanOverrideUntil?: string | null;
   createdAt: string;
   updatedAt: string;
 }

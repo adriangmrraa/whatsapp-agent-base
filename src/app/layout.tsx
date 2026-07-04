@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "WhatsApp Business Base",
@@ -15,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full antialiased dark">
       <body className="min-h-full flex flex-col bg-background text-foreground overflow-x-hidden">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
