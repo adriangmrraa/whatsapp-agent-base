@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { loginAction } from "./actions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { AlertCircleIcon, LoaderIcon } from "lucide-react";
 import { staggerContainer, fadeUpSmall } from "@/lib/animations";
 import type { LoginActionResult } from "./actions";
 
-const initialState: LoginActionResult = { success: false, error: null };
+const initialState: LoginActionResult = { success: false };
 
 const GOLD_FOCUS_SHADOW =
   "0 0 0 2px rgba(212,160,23,0.25), 0 0 12px rgba(212,160,23,0.12)";
@@ -52,13 +53,9 @@ export default function LoginForm() {
     >
       {/* Email field */}
       <motion.div className="flex flex-col gap-1.5" variants={fadeUpSmall}>
-        <label
-          htmlFor="email"
-          className="text-sm font-medium"
-          style={{ color: "rgba(245,245,220,0.7)" }}
-        >
+        <Label htmlFor="email" style={{ color: "rgba(245,245,220,0.7)" }}>
           Email
-        </label>
+        </Label>
         <GoldInput
           id="email"
           name="email"
@@ -66,18 +63,18 @@ export default function LoginForm() {
           placeholder="admin@ejemplo.com"
           required
           autoComplete="email"
+          defaultValue={state.values?.email ?? ""}
         />
+        {state.errors?.email?.[0] && (
+          <p className="text-xs text-red-400 mt-1">{state.errors.email[0]}</p>
+        )}
       </motion.div>
 
       {/* Password field */}
       <motion.div className="flex flex-col gap-1.5" variants={fadeUpSmall}>
-        <label
-          htmlFor="password"
-          className="text-sm font-medium"
-          style={{ color: "rgba(245,245,220,0.7)" }}
-        >
+        <Label htmlFor="password" style={{ color: "rgba(245,245,220,0.7)" }}>
           Contraseña
-        </label>
+        </Label>
         <GoldInput
           id="password"
           name="password"
@@ -86,6 +83,9 @@ export default function LoginForm() {
           required
           autoComplete="current-password"
         />
+        {state.errors?.password?.[0] && (
+          <p className="text-xs text-red-400 mt-1">{state.errors.password[0]}</p>
+        )}
       </motion.div>
 
       {/* Error message */}

@@ -12,21 +12,29 @@ const loginSchema = z.object({
 
 export type LoginActionResult = {
   success: boolean;
-  error: string | null;
+  error?: string;
+  errors?: Record<string, string[]>;
+  values?: { email?: string };
 };
 
 export async function loginAction(
   _prev: LoginActionResult,
   formData: FormData,
 ): Promise<LoginActionResult> {
-  const raw = {
-    email: formData.get("email"),
-    password: formData.get("password"),
-  };
+  const rawEmail = (formData.get("email") as string) ?? "";
 
-  const parsed = loginSchema.safeParse(raw);
+  const parsed = loginSchema.safeParse({
+    email: rawEmail,
+    password: formData.get("password"),
+  });
+
   if (!parsed.success) {
-    return { success: false, error: "Email o contraseña inválidos." };
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    return {
+      success: false,
+      errors: fieldErrors,
+      values: { email: rawEmail },
+    };
   }
 
   try {
@@ -39,7 +47,8 @@ export async function loginAction(
     if (err instanceof AuthError) {
       return {
         success: false,
-        error: "Credenciales incorrectas. Verificá tu email y contraseña.",
+        error: "Credenciales incorrectas",
+        values: { email: parsed.data.email },
       };
     }
     throw err;
