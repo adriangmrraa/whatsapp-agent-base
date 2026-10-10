@@ -18,6 +18,7 @@ The code lives locally *and* on GitHub — clone it, fork it, or use it as a tem
 | **Provider-agnostic AI** | Any OpenAI-compatible endpoint per tenant (OpenAI, OpenRouter, DeepSeek, Groq, Together, Ollama) |
 | **Vector memory** | Tenant-scoped semantic knowledge store on **pgvector** — ingest chunk+embed docs, retrieve top-k before `generateText`. Swappable embedding provider (default OpenAI `text-embedding-3-small`) |
 | **Agent platform seams** | A provider-neutral capability registry (surface + role gating, Realtime/Chat projections), a deterministic **System One** decision layer (Jev rules today, Laya swappable), and internal **voice-agent** (OpenAI Realtime) interfaces — one engine, two agents |
+| **Jev decision harness** | A reusable, provider-neutral decision layer — **Jev** (System One) with **OpenAI's Decisions API** as a second provider — plus a memory-augmented context primer (**Engram** local / cloud / Neon), SDD decision packs, a shadow/A-B ledger, and one-command onboarding → [`docs/jev-harness.md`](docs/jev-harness.md) |
 | **Durable session engine** | Per-conversation state machine (commercial / personal_acknowledged / handed_off) with compare-and-swap + idempotent side effects — survives restarts, suppresses duplicate webhooks, avoids unnecessary LLM calls |
 | **Human handoff** | Agent or human can claim a conversation; `human_override` window silences the AI; Chatwoot inbox bridging included |
 | **Security** | AES-256 encrypted credentials, per-tenant webhook signature verification, fail-closed dedup/CAS, rate limiting, secret redaction in logs |
@@ -69,6 +70,7 @@ webhook (ycloud | meta | chatwoot)
 | [`docs/channels-meta.md`](docs/channels-meta.md) | Instagram + Facebook (Meta Graph API) — design + adapter checklist |
 | [`docs/security.md`](docs/security.md) | Threat model, credentials, fail-closed rules |
 | [`docs/deployment.md`](docs/deployment.md) | Production checklist, cron, env reference |
+| [`docs/jev-harness.md`](docs/jev-harness.md) | **Jev decision harness** — provider-neutral decision layer (Jev + OpenAI Decisions), memory backends, SDD packs, one-command onboarding |
 | [`docs/for-ai-agents.md`](docs/for-ai-agents.md) | **Guide for AI coding agents** — how to explore, what context to ask for, harness requirements |
 | [`docs/presentations/`](docs/presentations/) | Self-contained HTML decks — open in a browser, no server needed |
 | [`AGENTS.md`](AGENTS.md) | Rules any AI/human agent must follow in this repo |
@@ -96,6 +98,42 @@ The base is intentionally generic. To ship a vertical product (pizzeria, clinic,
 
 See [`docs/for-ai-agents.md`](docs/for-ai-agents.md) if you're driving this repo with a coding agent.
 
+## Jev decision harness
+
+A reusable decision layer that sits **beside** the generative model: code owns the
+workflow, the LLM owns generation, and **Jev** (TypeSafe "System One") returns
+typed, calibrated decisions — `noul` (yes/no), `choice`, `score` — that the app
+branches on in code. **OpenAI's Decisions API** (`gpt-6-luna`) is a drop-in second
+provider.
+
+- **Provider-neutral** — a single `DecisionProvider` interface; switch Jev ↔ OpenAI
+  Decisions with an env var. See `src/lib/system-one/provider/`.
+- **Memory-augmented** — a `ContextPrimer` retrieves prior context/decisions from
+  **Engram** before every call and writes the decision back. Three memory backends,
+  env-switchable with no code change: `local` (local Engram), `cloud` (remote
+  Engram), `neon` (memories in this app's Postgres; `tenant_id` is **nullable** so
+  the harness runs with no tenant). See `src/lib/system-one/context/memory/`.
+- **Decision packs** — 14 SDD-oriented recipes (file-scope, workload-forecast,
+  guard, triage, test-impact, …). See `src/lib/system-one/packs/`.
+- **Policy + eval + ledger** — centralized thresholds and fail-posture, golden-fixture
+  evals, and a shadow → A/B → gate measurement ledger (`policy.ts`, `eval/`, `ledger/`).
+- **SDD integration kit** — `harness/sdd/` (in-repo docs + helpers; it does not edit
+  the agent's global skills).
+- **Agent packaging** — `harness/skills/jev-decide` (Agent Skill) + `harness/mcp/`
+  (stdio MCP server) + `harness/install.sh`.
+
+One-command onboarding (env + DB + optional Jev/OpenAI, YCloud, Meta Embedded
+Signup, catalog, harness install — idempotent and fail-soft):
+
+```bash
+npm run onboard               # interactive; asks what to enable
+npm run onboard -- --dry-run  # print the plan, change nothing
+```
+
+Set `JEV_API_KEY` (alias `TYPESAFE_API_KEY`) to enable Jev; choose the memory
+backend with `JEV_MEMORY=local|cloud|neon`. Full guide:
+[`docs/jev-harness.md`](docs/jev-harness.md).
+
 ## Roadmap
 
 One engine (tools + data + tenant + deterministic decisions + vector memory)
@@ -109,12 +147,14 @@ staff agent. Planned items are in parentheses; shipped items are not.
 - Internal voice agent runtime — Realtime session, audio, tool-call bridge
 - Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order
 - Instagram + Facebook channels via Meta Graph API
+- Jev decision harness — provider-neutral providers (Jev + OpenAI Decisions), memory backends (local / cloud / Neon, tenant-optional), 14 SDD decision packs, shadow/A-B ledger, one-command onboarding (see [`docs/jev-harness.md`](docs/jev-harness.md))
 
 ## Verification
 
 ```bash
 npx tsc --noEmit    # typecheck
 npx eslint src      # lint
+npm test            # unit tests (node:test via tsx)
 npm run build       # production build
 ```
 
