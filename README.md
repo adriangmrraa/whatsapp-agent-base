@@ -71,6 +71,7 @@ webhook (ycloud | meta | chatwoot)
 | [`docs/security.md`](docs/security.md) | Threat model, credentials, fail-closed rules |
 | [`docs/deployment.md`](docs/deployment.md) | Production checklist, cron, env reference |
 | [`docs/jev-harness.md`](docs/jev-harness.md) | **Jev decision harness** — provider-neutral decision layer (Jev + OpenAI Decisions), memory backends, SDD packs, one-command onboarding |
+| [`docs/jev-harness-ledger.md`](docs/jev-harness-ledger.md) | Jev ledger — how decisions are measured, and the honest caveats |
 | [`docs/for-ai-agents.md`](docs/for-ai-agents.md) | **Guide for AI coding agents** — how to explore, what context to ask for, harness requirements |
 | [`docs/presentations/`](docs/presentations/) | Self-contained HTML decks — open in a browser, no server needed |
 | [`AGENTS.md`](AGENTS.md) | Rules any AI/human agent must follow in this repo |
@@ -100,11 +101,11 @@ See [`docs/for-ai-agents.md`](docs/for-ai-agents.md) if you're driving this repo
 
 ## Jev decision harness
 
-A reusable decision layer that sits **beside** the generative model: code owns the
-workflow, the LLM owns generation, and **Jev** (TypeSafe "System One") returns
-typed, calibrated decisions — `noul` (yes/no), `choice`, `score` — that the app
-branches on in code. **OpenAI's Decisions API** (`gpt-6-luna`) is a drop-in second
-provider.
+A reusable, **provider-neutral decision layer** ships in this repo: code owns the
+workflow, **Jev** (or **OpenAI Decisions**) owns the bounded semantic decision, the
+LLM owns generation, and **Engram** gives every decision memory and an audit trail.
+It plugs into the local SDD coding-agent flow and is usable by students and the
+community with a single `JEV_API_KEY`.
 
 - **Provider-neutral** — a single `DecisionProvider` interface; switch Jev ↔ OpenAI
   Decisions with an env var. See `src/lib/system-one/provider/`.
@@ -120,19 +121,26 @@ provider.
 - **SDD integration kit** — `harness/sdd/` (in-repo docs + helpers; it does not edit
   the agent's global skills).
 - **Agent packaging** — `harness/skills/jev-decide` (Agent Skill) + `harness/mcp/`
-  (stdio MCP server) + `harness/install.sh`.
+  (stdio MCP server) + `harness/install.sh`. See [`harness/ONBOARDING.md`](harness/ONBOARDING.md).
 
 One-command onboarding (env + DB + optional Jev/OpenAI, YCloud, Meta Embedded
 Signup, catalog, harness install — idempotent and fail-soft):
 
 ```bash
-npm run onboard               # interactive; asks what to enable
-npm run onboard -- --dry-run  # print the plan, change nothing
+npm run onboard                 # interactive; asks what to enable
+npm run onboard -- --jev --yes  # non-interactive: env + db + decision smoke-test + skill install
+npm run onboard -- --dry-run    # print the plan, change nothing
 ```
 
 Set `JEV_API_KEY` (alias `TYPESAFE_API_KEY`) to enable Jev; choose the memory
-backend with `JEV_MEMORY=local|cloud|neon`. Full guide:
-[`docs/jev-harness.md`](docs/jev-harness.md).
+backend with `JEV_MEMORY=local|cloud|neon`.
+
+**Read [`docs/jev-harness.md`](docs/jev-harness.md)** — the canonical doc: the
+provider-neutral contract, the memory backends, the 14-pack catalog (when to use each
++ which Jev question type), the SDD integration, and the adoption methodology
+(shadow → measure → A/B → gate → calibrate). The measurement approach and the
+**honest caveats** (what Jev does and does *not* do) live in
+[`docs/jev-harness-ledger.md`](docs/jev-harness-ledger.md).
 
 ## Roadmap
 

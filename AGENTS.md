@@ -44,3 +44,21 @@ the long-form version.
 | Change routing/session logic | `src/lib/whatsapp/session-*` |
 | Add admin mutations | server actions + `requireTenantId` |
 | Add schema | `src/db/schema.ts` + migration + tenant_id |
+| Use the JEV decision harness | `src/lib/system-one/` + `harness/` + `docs/jev-harness.md` |
+
+## JEV decision harness (opt-in)
+
+This repo ships a provider-neutral **decision layer** (Jev / OpenAI Decisions)
+with a pack catalog, thresholds, a measurement ledger and an SDD integration. It
+is **opt-in and shadow-first**: nothing changes behavior until the ledger gate
+promotes a pack.
+
+- **Canonical doc:** [`docs/jev-harness.md`](docs/jev-harness.md); ledger +
+  caveats: [`docs/jev-harness-ledger.md`](docs/jev-harness-ledger.md).
+- **Source of truth:** `src/lib/system-one/` (`provider/`, `context/`, `packs/`,
+  `policy.ts`, `ledger/`, `eval/`, `harness/`).
+- **Agent surfaces:** `harness/skills/jev-decide/` (skill) and `harness/mcp/`
+  (MCP tools). Onboarding: `harness/ONBOARDING.md` + `npm run onboard`.
+- **Rules that carry over:** provider-agnostic core; secrets server-side only
+  (never in `state`); fail-closed on `closed` packs; Engram is dev memory, never
+  the product's tenant memory.
