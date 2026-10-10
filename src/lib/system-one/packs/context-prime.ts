@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   describeCandidate,
@@ -21,13 +22,13 @@ import {
 // blocks work; on no signal we keep every candidate (fail-open).
 
 export const CONTEXT_PRIME_PACK_ID = "context-prime";
-export const CONTEXT_PRIME_POSTURE = "open" as const;
+export const CONTEXT_PRIME_POSTURE = postureOf(CONTEXT_PRIME_PACK_ID);
 
 export const CONTEXT_PRIME_THRESHOLDS = {
   /** Minimum `noul` to inject a candidate excerpt. */
-  candidateMin: 0.5,
+  candidateMin: noulThreshold(CONTEXT_PRIME_PACK_ID, "candidate"),
   /** Below this coverage `noul` the pack flags insufficient context. */
-  coverageMin: 0.5,
+  coverageMin: noulThreshold(CONTEXT_PRIME_PACK_ID, "coverage"),
 } as const;
 
 const SELECT_PREFIX = "select_";

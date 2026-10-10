@@ -10,6 +10,16 @@ export type {
   SystemOneInput,
 } from "./types";
 export { LABEL_DEGRADATION, labelDegradation } from "./types";
+export {
+  choiceMargin,
+  noulThreshold,
+  POLICY,
+  PolicyError,
+  policyLabels,
+  postureOf,
+  scoreThreshold,
+} from "./policy";
+export type { FailPosture, LabelPolicy, ThresholdKind } from "./policy";
 export { ruleBasedDecisionLayer } from "./rules";
 export {
   getDecisionConfig,

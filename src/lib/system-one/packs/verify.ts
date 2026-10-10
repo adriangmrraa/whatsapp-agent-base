@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   choiceOf,
@@ -20,13 +21,13 @@ import {
 // the claim unsupported and the evidence type as "none".
 
 export const VERIFY_PACK_ID = "verify";
-export const VERIFY_POSTURE = "open" as const;
+export const VERIFY_POSTURE = postureOf(VERIFY_PACK_ID);
 
 export const VERIFY_THRESHOLDS = {
   /** Minimum `noul` for the evidence to be considered adequate. */
-  evidenceMin: 0.5,
+  evidenceMin: noulThreshold(VERIFY_PACK_ID, "evidence"),
   /** Minimum `noul` for the claim to match the evidence. */
-  matchesMin: 0.5,
+  matchesMin: noulThreshold(VERIFY_PACK_ID, "matches"),
 } as const;
 
 /** Fallback option for the evidence-type `choice`. */

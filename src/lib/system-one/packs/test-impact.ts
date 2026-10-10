@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   describeCandidate,
@@ -20,13 +21,13 @@ import {
 // select every candidate and recommend the full suite (fail-open, conservative).
 
 export const TEST_IMPACT_PACK_ID = "test-impact";
-export const TEST_IMPACT_POSTURE = "open" as const;
+export const TEST_IMPACT_POSTURE = postureOf(TEST_IMPACT_PACK_ID);
 
 export const TEST_IMPACT_THRESHOLDS = {
   /** Minimum `noul` for a test file to be selected. */
-  testMin: 0.4,
+  testMin: noulThreshold(TEST_IMPACT_PACK_ID, "test"),
   /** At/above this `noul` the full suite should run. */
-  regressionMin: 0.6,
+  regressionMin: noulThreshold(TEST_IMPACT_PACK_ID, "regression"),
 } as const;
 
 const TEST_PREFIX = "test_";

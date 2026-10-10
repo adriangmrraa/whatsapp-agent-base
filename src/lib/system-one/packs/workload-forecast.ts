@@ -1,7 +1,9 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf, scoreThreshold } from "../policy";
 import {
   askPack,
   noulOf,
+  resolveThreshold,
   scoreOf,
   type PackDefinition,
   type PackInput,
@@ -23,15 +25,15 @@ import {
 // proceed; a bad forecast costs review effort, it must not block the workflow.
 
 export const WORKLOAD_FORECAST_PACK_ID = "workload-forecast";
-export const WORKLOAD_FORECAST_POSTURE = "open" as const;
+export const WORKLOAD_FORECAST_POSTURE = postureOf(WORKLOAD_FORECAST_PACK_ID);
 
 export const WORKLOAD_FORECAST_THRESHOLDS = {
   /** Score index (0-based) at/above which the diff is flagged as large. */
-  sizeWarn: 3,
+  sizeWarn: scoreThreshold(WORKLOAD_FORECAST_PACK_ID, "sizeWarn"),
   /** At/above this `noul` chained PRs are recommended. */
-  chainedMin: 0.5,
+  chainedMin: noulThreshold(WORKLOAD_FORECAST_PACK_ID, "chained"),
   /** At/above this `noul` a decision is needed before apply. */
-  decisionMin: 0.5,
+  decisionMin: noulThreshold(WORKLOAD_FORECAST_PACK_ID, "decision"),
 } as const;
 
 /** Exact guard line emitted when a pre-apply decision is required. */
@@ -97,14 +99,25 @@ export async function runWorkloadForecast(
   const chainedValue = noulOf(asked.answers.chained);
   const decisionValue = noulOf(asked.answers.decisionNeeded);
 
+  const chainedMin = resolveThreshold(
+    input,
+    "chainedMin",
+    WORKLOAD_FORECAST_THRESHOLDS.chainedMin,
+  );
+  const decisionMin = resolveThreshold(
+    input,
+    "decisionMin",
+    WORKLOAD_FORECAST_THRESHOLDS.decisionMin,
+  );
+
   const chained =
     !asked.degraded &&
     chainedValue !== undefined &&
-    chainedValue >= WORKLOAD_FORECAST_THRESHOLDS.chainedMin;
+    chainedValue >= chainedMin;
   const decisionNeeded =
     !asked.degraded &&
     decisionValue !== undefined &&
-    decisionValue >= WORKLOAD_FORECAST_THRESHOLDS.decisionMin;
+    decisionValue >= decisionMin;
 
   const guardLines: string[] = [];
   if (decisionNeeded) guardLines.push(GUARD_DECISION_LINE);

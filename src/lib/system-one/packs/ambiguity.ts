@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   noulOf,
@@ -17,15 +18,15 @@ import {
 // Building the wrong thing is far costlier than one clarifying question.
 
 export const AMBIGUITY_PACK_ID = "ambiguity";
-export const AMBIGUITY_POSTURE = "closed" as const;
+export const AMBIGUITY_POSTURE = postureOf(AMBIGUITY_PACK_ID);
 
 export const AMBIGUITY_THRESHOLDS = {
   /** At/above this `noul` the requirement is ambiguous. */
-  ambiguousMin: 0.5,
+  ambiguousMin: noulThreshold(AMBIGUITY_PACK_ID, "ambiguous"),
   /** At/above this `noul` required information is missing. */
-  missingInfoMin: 0.5,
+  missingInfoMin: noulThreshold(AMBIGUITY_PACK_ID, "missingInfo"),
   /** At/above this `noul` the requirements contradict each other. */
-  contradictoryMin: 0.5,
+  contradictoryMin: noulThreshold(AMBIGUITY_PACK_ID, "contradictory"),
 } as const;
 
 export const AMBIGUITY_REASONS = {
