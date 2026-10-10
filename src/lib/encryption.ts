@@ -64,3 +64,14 @@ export function decrypt(encryptedText: string): string | null {
     return null;
   }
 }
+
+/**
+ * Returns the decrypted value when the input looks like an encrypted
+ * "iv:ciphertext" payload; otherwise returns the input unchanged.
+ * Lets columns migrate from plaintext to encrypted without a data sweep.
+ */
+export function decryptIfEncrypted(value: string | null | undefined): string {
+  if (!value) return "";
+  if (!/^[0-9a-f]{32}:[0-9a-f]+$/i.test(value)) return value;
+  return decrypt(value) ?? value;
+}
