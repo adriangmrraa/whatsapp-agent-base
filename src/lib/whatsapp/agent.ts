@@ -1,8 +1,17 @@
 import { processMessage } from "@/lib/agent";
 import { checkAndUpdateReprompt } from "./anti-loop";
-import { saveMessage } from "@/lib/ycloud/conversation";
 import { detectInjection } from "./tools/prompt-security";
+import type { SessionContext } from "./session-policy";
 import logger from "@/lib/logger";
+
+// ─── Fixed replies (sent without invoking the LLM) ───────────────────────────
+
+export const FIXED_ACK_REPLY =
+  "¡Gracias por tu mensaje! Si necesitás algo del negocio, escribinos.";
+export const FIXED_CLARIFICATION_REPLY =
+  "¿En qué puedo ayudarte? Podés consultar el catálogo, precios, delivery o el estado de tu pedido.";
+export const HANDOFF_REPLY =
+  "Te voy a conectar con un agente humano que puede ayudarte mejor. Un momento por favor.";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -117,16 +126,22 @@ function detectHallucination(
  * 6. Returns the response text and any pending media
  */
 export async function runWhatsAppAgent({
+  tenantId,
   conversationId,
   customerPhone,
   messages,
+  sessionContext,
+  routingKind,
 }: {
+  tenantId: number;
   conversationId: number;
   customerPhone: string;
   messages: Array<{
     role: "user" | "assistant" | "system";
     content: string;
   }>;
+  sessionContext?: SessionContext;
+  routingKind?: string;
 }): Promise<{ text: string; pendingMedia: PendingMedia[] }> {
   // ── a. Prompt injection check ──────────────────────────────────────────
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
@@ -187,8 +202,21 @@ export async function runWhatsAppAgent({
     });
   }
 
+  // The durable session state crosses the LLM boundary only as compact
+  // commercial facts — appended to the forced text, never as raw state.
+  if (sessionContext || routingKind) {
+    const hints: string[] = [];
+    if (sessionContext?.hasActiveOrder) hints.push("el cliente tiene un pedido activo");
+    if (sessionContext?.hasActiveCart) hints.push("el cliente tiene un carrito activo");
+    if (sessionContext?.commercialIntent) hints.push(`intención previa: ${sessionContext.commercialIntent}`);
+    if (hints.length) {
+      forceText = `${forceText}\n\n(Contexto de sesión: ${hints.join("; ")}.)`;
+    }
+  }
+
   // ── e. Call processMessage ─────────────────────────────────────────────
   const rawText = await processMessage({
+    tenantId,
     phoneNumber: customerPhone,
     text: forceText,
     conversationHistory: history,
@@ -204,18 +232,16 @@ export async function runWhatsAppAgent({
     );
 
     text = await processMessage({
+      tenantId,
       phoneNumber: customerPhone,
       text: `${HALLUCINATION_DIRECTIVE}\n\n${lastContent}`,
       conversationHistory: history,
     });
   }
 
-  // ── g. Save assistant response to conversation ─────────────────────────
-  try {
-    await saveMessage(conversationId, "assistant", text);
-  } catch (error) {
-    logger.error({ error }, "[agent] Failed to save assistant response");
-  }
+  // ── g. Response persistence is owned by the inbound pipeline ───────────
+  // (deliverReply inserts the assistant message with tenant scoping), so the
+  // orchestrator only returns text + pending media.
 
   // ── h. Return result ───────────────────────────────────────────────────
   return { text, pendingMedia: [] };

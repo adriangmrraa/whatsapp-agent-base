@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { leads } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { normalizePhone } from "./phone";
 
 export interface CaptureOrUpdateLeadOptions {
@@ -21,6 +21,7 @@ export interface CaptureOrUpdateLeadOptions {
  */
 export async function captureOrUpdateLead(
   phone: string,
+  tenantId: number,
   options?: CaptureOrUpdateLeadOptions,
 ): Promise<number> {
   const normalizedPhone = normalizePhone(phone);
@@ -29,7 +30,7 @@ export async function captureOrUpdateLead(
   const existing = await db
     .select({ id: leads.id, name: leads.name, firstMessage: leads.firstMessage })
     .from(leads)
-    .where(eq(leads.phone, normalizedPhone))
+    .where(and(eq(leads.phone, normalizedPhone), eq(leads.tenantId, tenantId)))
     .limit(1);
 
   if (existing.length > 0) {
@@ -56,6 +57,7 @@ export async function captureOrUpdateLead(
   const [created] = await db
     .insert(leads)
     .values({
+      tenantId,
       phone: normalizedPhone,
       name: options?.name ?? null,
       firstMessage: options?.firstMessage ?? null,

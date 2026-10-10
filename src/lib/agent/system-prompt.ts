@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { agentConfig, products } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export interface Product {
   name: string;
@@ -14,16 +14,20 @@ export interface Product {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AgentConfig = Record<string, any>;
 
-export async function loadConfig(): Promise<AgentConfig | null> {
+export async function loadConfig(tenantId: number): Promise<AgentConfig | null> {
   try {
-    const rows = await db.select().from(agentConfig).limit(1);
+    const rows = await db
+      .select()
+      .from(agentConfig)
+      .where(eq(agentConfig.tenantId, tenantId))
+      .limit(1);
     return (rows[0] as AgentConfig) ?? null;
   } catch {
     return null;
   }
 }
 
-export async function loadCatalog(): Promise<Product[]> {
+export async function loadCatalog(tenantId: number): Promise<Product[]> {
   try {
     const items = await db
       .select({
@@ -35,7 +39,7 @@ export async function loadCatalog(): Promise<Product[]> {
         available: products.available,
       })
       .from(products)
-      .where(eq(products.available, true))
+      .where(and(eq(products.available, true), eq(products.tenantId, tenantId)))
       .orderBy(products.sortOrder);
 
     return items as Product[];
