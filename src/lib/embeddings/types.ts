@@ -60,6 +60,8 @@ export interface VectorStore {
   }): Promise<VectorMatch[]>;
   /** Remove every chunk of a logical document for the tenant. */
   deleteDocument(input: { tenantId: number; documentKey: string }): Promise<number>;
+  /** Current content hashes of a document (idempotency check). */
+  listHashes(input: { tenantId: number; documentKey: string }): Promise<string[]>;
   /** Count the tenant's chunks (health / onboarding checks). */
   count(input: { tenantId: number }): Promise<number>;
 }
