@@ -22,6 +22,20 @@ The code lives locally *and* on GitHub — clone it, fork it, or use it as a tem
 | **Admin panel** | Conversations inbox, orders, products, leads, promotions, analytics, agent config — all tenant-scoped |
 | **Resilience** | Redis message buffer (+in-memory fallback), outbound queue with DLQ, circuit breakers, cron flush endpoint |
 
+## Roadmap
+
+Shipped (stable):
+
+- Multi-tenant core, provider adapters (YCloud / Meta / Chatwoot), durable session engine, human handoff, security, admin panel, resilience.
+
+Planned (not yet built — items in parentheses are still in progress):
+
+- (Embeddings + vector memory — `pgvector` on Postgres, tenant-scoped, retrieve-before-generate.)
+- (System One deterministic decision layer — Jev / Laya — for intent, tool routing, and risk/role gating.)
+- (Internal voice agent — OpenAI Realtime API, staff-facing, role-gated.)
+- (Sales/attention agent on Instagram + Facebook — Meta Graph API.)
+- (Deploy targets — local, VPS, Render — with Neon Postgres as the default onboarding database.)
+
 ## Stack
 
 Next.js 16 (App Router) · TypeScript 5 · PostgreSQL + Drizzle ORM · NextAuth v5 · Vercel AI SDK · Upstash Redis (optional) · Tailwind 4 + Radix UI.
