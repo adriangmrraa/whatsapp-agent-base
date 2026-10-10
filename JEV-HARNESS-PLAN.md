@@ -489,21 +489,21 @@ review between units.
 
 ## 12. Execution & delegation policy (multi-agent, waves)
 
-### 12.1 Memory provider — Engram, with two storage backends
+### 12.1 Memory provider — Engram, three switchable backends
 
-The memory layer **IS Engram**: one interface, and the only choice is **where the
-memories are stored**. There are **two options** (env `JEV_MEMORY`):
+The memory layer **IS Engram**: one `MemoryProvider` interface; the only choice is
+**where the memories live**, switchable by env `JEV_MEMORY` with **no code change**:
 
-1. `engram` — **local Engram** (default). Talks to the local Engram server
-   (`engram serve`, `127.0.0.1:7437`). `search` returns 300-char previews → always
-   `get` for the full content.
-2. `neon` — **Engram with the memories hosted in Neon** (the app's own Postgres).
-   Same interface/semantics, tenant-scoped `jen_memory` table (`tenant_id` +
-   `project`). For machines/deployments with no local Engram.
+| `JEV_MEMORY` | Backend | Config |
+|---|---|---|
+| `local` (alias `engram`) | **Local Engram** server — default | `ENGRAM_HTTP_URL` (default `http://127.0.0.1:7437`) |
+| `cloud` | **Cloud Engram** (remote server) | `ENGRAM_CLOUD_URL` + `ENGRAM_CLOUD_TOKEN` |
+| `neon` | **Engram-on-Neon** — memories in the app's Postgres table `jen_memory` | `DATABASE_URL` |
+| `none` | fail-soft degraded fallback (stateless) — **not** a backend | — |
 
-`none` is **not a third option** — it is the fail-soft degraded fallback (stateless),
-used only when neither backend is configured/reachable; memory is advisory and must
-never block a decision.
+`local` and `cloud` are the same HTTP provider with a different base URL/token;
+`neon` is interface-identical and backed by Postgres. All three are backend-agnostic
+for the `ContextPrimer` (§2) and every pack.
 
 ```ts
 interface MemoryProvider {
@@ -514,11 +514,15 @@ interface MemoryProvider {
 }
 ```
 
-Both backends expose the identical interface, so the `ContextPrimer` (§2) and every
-pack are backend-agnostic — switching is env-only. **Shipped by the foundation:**
-`src/lib/system-one/context/memory/{engram,neon,none,registry}.ts` (+ `jenMemory`
-table, migration `0005`). Note: the `neon` option requires a `tenantId` (isolation
-law); with none it degrades to `none` rather than running an unscoped query.
+**No tenant in harness mode:** `jen_memory.tenant_id` is **nullable** — with it
+`null`, the harness runs in a harness/global scope (no tenant required); the product
+always sets it (isolation law unchanged for tenant data). Delivered by migration
+`0006` (`tenant_id` DROP NOT NULL + harness-scope index). The harness calls whichever
+backend is configured (local / cloud / neon) through this single interface.
+
+**Shipped by the foundation:** `context/memory/{engram,neon,none,registry}.ts` +
+`jenMemory` table (migration `0005`). This section (three modes + nullable tenant) is
+an amendment delivered in its own worktree (`jev-harness-memory-scope`).
 
 ### 12.2 Test gate — mandatory, automatic, before every commit
 
