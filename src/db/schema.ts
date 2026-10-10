@@ -480,6 +480,11 @@ export const agentConfig = pgTable(
     embeddingModel: varchar("embedding_model", { length: 100 }),
     embeddingDimensions: integer("embedding_dimensions"),
 
+    // ─── Hosted decision layer (System One — Jev/Laya API) ──────────────
+    decisionApiKey: text("decision_api_key"),
+    decisionBaseUrl: varchar("decision_base_url", { length: 255 }),
+    decisionEngine: varchar("decision_engine", { length: 50 }),
+
     // ─── Business Operations ────────────────────────────────────────────
     operatingHours: text("operating_hours"),
     deliveryEnabled: boolean("delivery_enabled").notNull().default(true),

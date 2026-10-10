@@ -7,9 +7,8 @@ import type {
 // ─── Rule-based decision layer ("Jev" default) ───────────────────────────────
 //
 // Pure keyword/heuristic classification — no network, no model. This is the
-// deterministic core the LLM flow consults first. A hosted Jev/Laya provider
-// can replace it behind the same DecisionLayer interface without touching the
-// agents.
+// deterministic core the LLM flow consults first, and the local fallback a
+// hosted Jev/Laya provider degrades to without touching the agents.
 
 const HANDOFF = /hablar con (un )?humano|una persona|un agente|operador|representante|asesor/i;
 const COMMERCIAL =
@@ -24,29 +23,36 @@ function classify(text: string): { choice: string; reason: string } {
   return { choice: "other", reason: "no_rule_matched" };
 }
 
-export const ruleBasedDecisionLayer: DecisionLayer = {
-  name: "jev",
-  async decide(input: SystemOneInput): Promise<SystemOneDecision> {
-    const { choice, reason } = classify(input.text);
+async function decideSet(input: SystemOneInput): Promise<SystemOneDecision[]> {
+  const { choice, reason } = classify(input.text);
 
-    if (choice === "handoff") {
-      return {
+  if (choice === "handoff") {
+    return [
+      {
         kind: "gate",
         label: "intent",
         choice,
         allow: false,
         reason,
         provider: "jev",
-      };
-    }
+      },
+    ];
+  }
 
-    return {
+  return [
+    {
       kind: "choice",
       label: "intent",
       choice,
       allow: true,
       reason,
       provider: "jev",
-    };
-  },
+    },
+  ];
+}
+
+export const ruleBasedDecisionLayer: DecisionLayer = {
+  name: "jev",
+  decide: async (input) => (await decideSet(input))[0],
+  decideSet,
 };
