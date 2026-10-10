@@ -92,12 +92,20 @@ export async function processInbound(
   }
 
   // ── 3. Find or create conversation ──────────────────────────────────────
+  // Meta serves WhatsApp, Messenger and Instagram behind one provider; the
+  // concrete channel family lives in the channel row's config.
+  const configuredChannel = (channelRow?.config as { channel?: string } | undefined)
+    ?.channel;
   const channel =
     inbound.provider === "chatwoot"
       ? "chatwoot"
       : inbound.provider === "telegram"
         ? "telegram"
-        : "whatsapp";
+        : configuredChannel === "messenger"
+          ? "messenger"
+          : configuredChannel === "instagram"
+            ? "instagram"
+            : "whatsapp";
 
   const { id: conversationId } = await findOrCreateConversation({
     tenantId,
@@ -283,15 +291,20 @@ async function getConversationProvider(conversationId: number) {
   return conv;
 }
 
-async function channelExternalIdFor(channelId: number | null): Promise<string> {
-  if (!channelId) return "";
+async function channelContextFor(
+  channelId: number | null,
+): Promise<{ externalId: string; config: Record<string, unknown> }> {
+  if (!channelId) return { externalId: "", config: {} };
   const { channels } = await import("@/db/schema");
   const [ch] = await db
-    .select({ externalId: channels.externalId })
+    .select({ externalId: channels.externalId, config: channels.config })
     .from(channels)
     .where(eq(channels.id, channelId))
     .limit(1);
-  return ch?.externalId ?? "";
+  return {
+    externalId: ch?.externalId ?? "",
+    config: (ch?.config as Record<string, unknown>) ?? {},
+  };
 }
 
 export async function deliverReply(
@@ -304,13 +317,15 @@ export async function deliverReply(
   const provider = getProvider(conv.provider as never);
   if (!provider) return;
   const credentials = await loadProviderCredentials(tenantId, conv.provider as never);
-  const channelExternalId = await channelExternalIdFor(conv.channelId);
+  const { externalId: channelExternalId, config: channelConfig } =
+    await channelContextFor(conv.channelId);
 
   const send = await provider.send({
     credentials,
     channelExternalId,
     to: conv.externalUserId,
     payload: { kind: "text", text },
+    channelConfig,
   });
   if (!send.ok) {
     logger.error({ conversationId, error: send.error }, "[inbound] reply send failed");
@@ -332,13 +347,15 @@ export async function deliverMedia(
   const provider = getProvider(conv.provider as never);
   if (!provider) return;
   const credentials = await loadProviderCredentials(tenantId, conv.provider as never);
-  const channelExternalId = await channelExternalIdFor(conv.channelId);
+  const { externalId: channelExternalId, config: channelConfig } =
+    await channelContextFor(conv.channelId);
 
   const send = await provider.send({
     credentials,
     channelExternalId,
     to: conv.externalUserId,
     payload: { kind: media.kind, url: media.url, caption: media.caption },
+    channelConfig,
   });
   if (send.ok) {
     await insertMessage({

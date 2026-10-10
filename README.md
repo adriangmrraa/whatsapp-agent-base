@@ -106,9 +106,9 @@ staff agent. Planned items are in parentheses; shipped items are not.
 - Agent-platform seams — capability registry, System One decision layer (Jev rules / Laya swappable), internal voice-agent (OpenAI Realtime) interfaces
 - Deploy docs for local / VPS / Render with Neon as the default database
 - Hosted Jev/Laya decision provider behind `DecisionLayer` — per-tenant config, batched `decideSet`, timeout + circuit breaker, rules fallback
-- (Internal voice agent runtime — Realtime session, audio, tool-call bridge)
-- (Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order)
-- (Instagram + Facebook channels via Meta Graph API)
+- Internal voice agent runtime — Realtime session, audio, tool-call bridge
+- Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order
+- Instagram + Facebook channels via Meta Graph API
 
 ## Verification
 

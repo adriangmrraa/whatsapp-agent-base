@@ -329,16 +329,17 @@ export async function sendOutboundMessage(input: {
     // The provider's "from"/target identity:
     //  - ycloud / meta → the channel's externalId (business phone / phone_number_id)
     //  - chatwoot      → the Chatwoot conversation id stored on the conversation
-    const channelExternalId =
+    const channelContext =
       provider.provider === "chatwoot"
-        ? (conv.externalConversationId ?? "")
-        : ((await channelFromId(conv.channelId)) ?? "");
+        ? { externalId: conv.externalConversationId ?? "", config: {} as Record<string, unknown> }
+        : await channelContextFromId(conv.channelId);
 
     result = await provider.send({
       credentials,
-      channelExternalId,
+      channelExternalId: channelContext.externalId,
       to: conv.externalUserId,
       payload,
+      channelConfig: channelContext.config,
     });
 
     if (!result.ok) {
@@ -370,13 +371,18 @@ export async function sendOutboundMessage(input: {
   return result;
 }
 
-async function channelFromId(channelId: number | null): Promise<string | null> {
-  if (!channelId) return null;
+async function channelContextFromId(
+  channelId: number | null,
+): Promise<{ externalId: string; config: Record<string, unknown> }> {
+  if (!channelId) return { externalId: "", config: {} };
   const { channels } = await import("@/db/schema");
   const [ch] = await db
-    .select({ externalId: channels.externalId })
+    .select({ externalId: channels.externalId, config: channels.config })
     .from(channels)
     .where(eq(channels.id, channelId))
     .limit(1);
-  return ch?.externalId ?? null;
+  return {
+    externalId: ch?.externalId ?? "",
+    config: (ch?.config as Record<string, unknown>) ?? {},
+  };
 }

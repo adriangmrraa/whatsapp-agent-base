@@ -66,6 +66,14 @@ export async function loadProviderCredentials(
           key: "access_token",
           envFallback: process.env.META_ACCESS_TOKEN ?? "",
         }),
+        // Facebook Page / Instagram messaging need a PAGE token, not a WABA
+        // token. Falls back to access_token when unset (single-purpose tenants).
+        page_access_token: await getCredential({
+          tenantId,
+          provider: "meta",
+          key: "page_access_token",
+          envFallback: process.env.META_PAGE_ACCESS_TOKEN ?? "",
+        }),
         app_secret: await getCredential({
           tenantId,
           provider: "meta",

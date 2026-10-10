@@ -5,13 +5,21 @@ import type {
   OutboundPayload,
   SendResult,
 } from "./types";
-import { META_GRAPH_VERSION } from "@/lib/meta/config";
+import { META_GRAPH_BASE } from "@/lib/meta/config";
 
-// ─── Meta WhatsApp Cloud API provider ────────────────────────────────────────
+// ─── Meta provider (WhatsApp Cloud API + Messenger + Instagram) ──────────────
 //
-// Direct Meta integration — no BSP. Webhook payloads arrive as
-// { entry: [{ changes: [{ field: "messages", value: {...} }] }] } with
-// value.metadata.phone_number_id identifying the tenant-facing number.
+// One adapter, three endpoints sharing the same webhook + signature + Send API
+// mechanics. The channel family comes from `channels.config.channel`
+// ("whatsapp" | "messenger" | "instagram") — see docs/channels-meta.md.
+//
+//   WhatsApp Cloud : { entry: [{ changes: [{ field:"messages", value }] }] }
+//                    value.metadata.phone_number_id identifies the channel.
+//   Page/Instagram : { object:"page"|"instagram",
+//                      entry: [{ id: <page/ig id>, messaging: [{...}] }] }
+//                    entry.id identifies the channel; Send API POST /me/messages.
+//
+// Signatures are identical: X-Hub-Signature-256 = HMAC-SHA256(body, app_secret).
 
 interface MetaMessage {
   id?: string;
@@ -26,9 +34,43 @@ interface MetaMessage {
   location?: { latitude?: number; longitude?: number; name?: string; address?: string };
 }
 
+interface MetaMessagingEvent {
+  sender?: { id?: string };
+  recipient?: { id?: string };
+  message?: {
+    mid?: string;
+    text?: string;
+    is_echo?: boolean;
+    attachments?: { type?: string; payload?: { url?: string } }[];
+  };
+}
+
 const SUPPORTED = new Set(["text", "image", "audio", "document", "video", "sticker", "location"]);
 
-function buildMetaBody(to: string, payload: OutboundPayload): Record<string, unknown> {
+type MetaChannelKind = "whatsapp" | "messenger" | "instagram";
+
+function channelKind(config: Record<string, unknown> | undefined): MetaChannelKind {
+  const value = config?.channel;
+  if (value === "messenger" || value === "instagram") return value;
+  return "whatsapp";
+}
+
+function attachmentKind(type: string | undefined): NormalizedInbound["kind"] | null {
+  switch (type) {
+    case "image":
+      return "image";
+    case "video":
+      return "video";
+    case "audio":
+      return "audio";
+    case "file":
+      return "document";
+    default:
+      return null;
+  }
+}
+
+function buildWhatsAppBody(to: string, payload: OutboundPayload): Record<string, unknown> {
   const base = { messaging_product: "whatsapp", recipient_type: "individual", to };
   if (payload.kind === "text") {
     return { ...base, type: "text", text: { body: payload.text, preview_url: false } };
@@ -37,6 +79,18 @@ function buildMetaBody(to: string, payload: OutboundPayload): Record<string, unk
   if (payload.caption) mediaBody.caption = payload.caption;
   if (payload.kind === "document" && payload.fileName) mediaBody.filename = payload.fileName;
   return { ...base, type: payload.kind, [payload.kind]: mediaBody };
+}
+
+function buildPageBody(to: string, payload: OutboundPayload): Record<string, unknown> {
+  const base = { recipient: { id: to }, messaging_type: "RESPONSE" };
+  if (payload.kind === "text") {
+    return { ...base, message: { text: payload.text } };
+  }
+  const type = payload.kind === "document" ? "file" : payload.kind;
+  return {
+    ...base,
+    message: { attachment: { type, payload: { url: payload.url, is_reusable: true } } },
+  };
 }
 
 export const metaProvider: MessagingProvider = {
@@ -52,20 +106,67 @@ export const metaProvider: MessagingProvider = {
     return a.length === b.length && timingSafeEqual(a, b);
   },
 
+  isNoise(payload) {
+    const body = payload as { entry?: unknown[] } | undefined;
+    return !Array.isArray(body?.entry) || body.entry.length === 0;
+  },
+
   parseInbound(payload) {
     const out: NormalizedInbound[] = [];
     const body = payload as {
-      entry?: { changes?: { field?: string; value?: Record<string, unknown> }[] }[];
+      object?: string;
+      entry?: {
+        id?: string;
+        changes?: { field?: string; value?: Record<string, unknown> }[];
+        messaging?: MetaMessagingEvent[];
+      }[];
     };
 
     for (const entry of body?.entry ?? []) {
+      // ── Facebook Page / Instagram Messaging ────────────────────────────
+      if (body?.object === "page" || body?.object === "instagram") {
+        const channelExternalId = entry.id;
+        if (!channelExternalId) continue;
+        for (const event of entry.messaging ?? []) {
+          const message = event.message;
+          if (!message?.mid) continue; // delivery/read/postback carry no message
+          if (message.is_echo) continue; // drop our own outbound echoes
+          const senderId = event.sender?.id;
+          if (!senderId || senderId === channelExternalId) continue; // never self
+
+          const attachment = message.attachments?.[0];
+          const mediaKind = attachmentKind(attachment?.type);
+          const kind: NormalizedInbound["kind"] | null = message.text
+            ? "text"
+            : mediaKind;
+          if (!kind) continue;
+
+          out.push({
+            provider: "meta",
+            messageId: message.mid,
+            externalUserId: senderId,
+            channelExternalId,
+            kind,
+            text: message.text,
+            media: attachment
+              ? { kind, url: attachment.payload?.url }
+              : undefined,
+            raw: message,
+          });
+        }
+        continue;
+      }
+
+      // ── WhatsApp Cloud API ─────────────────────────────────────────────
       for (const change of entry?.changes ?? []) {
         if (change?.field !== "messages") continue;
-        const value = change.value as {
-          metadata?: { phone_number_id?: string };
-          contacts?: { profile?: { name?: string } }[];
-          messages?: MetaMessage[];
-        } | undefined;
+        const value = change.value as
+          | {
+              metadata?: { phone_number_id?: string };
+              contacts?: { profile?: { name?: string } }[];
+              messages?: MetaMessage[];
+            }
+          | undefined;
         if (!value?.messages) continue;
 
         const phoneNumberId = value.metadata?.phone_number_id;
@@ -116,15 +217,35 @@ export const metaProvider: MessagingProvider = {
     return out;
   },
 
-  async send({ credentials, channelExternalId, to, payload }): Promise<SendResult> {
-    const token = credentials.access_token;
-    const phoneNumberId = channelExternalId || credentials.phone_number_id;
-    if (!token || !phoneNumberId) {
-      return { ok: false, error: "Missing meta access_token or phone_number_id" };
-    }
+  async send({
+    credentials,
+    channelExternalId,
+    to,
+    payload,
+    channelConfig,
+  }): Promise<SendResult> {
+    const kind = channelKind(channelConfig);
+    const token =
+      kind === "whatsapp"
+        ? credentials.access_token
+        : credentials.page_access_token || credentials.access_token;
 
-    const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${phoneNumberId}/messages`;
-    const body = buildMetaBody(to, payload);
+    let url: string;
+    let body: Record<string, unknown>;
+    if (kind === "whatsapp") {
+      const phoneNumberId = channelExternalId || credentials.phone_number_id;
+      if (!token || !phoneNumberId) {
+        return { ok: false, error: "Missing meta access_token or phone_number_id" };
+      }
+      url = `${META_GRAPH_BASE}/${phoneNumberId}/messages`;
+      body = buildWhatsAppBody(to, payload);
+    } else {
+      if (!token) {
+        return { ok: false, error: `Missing meta page access token for ${kind}` };
+      }
+      url = `${META_GRAPH_BASE}/me/messages`;
+      body = buildPageBody(to, payload);
+    }
 
     for (let attempt = 0; attempt <= 2; attempt++) {
       const controller = new AbortController();
@@ -144,8 +265,12 @@ export const metaProvider: MessagingProvider = {
         if (response.ok) {
           const data = (await response.json().catch(() => ({}))) as {
             messages?: { id?: string }[];
+            message_id?: string;
           };
-          return { ok: true, providerMessageId: data.messages?.[0]?.id };
+          return {
+            ok: true,
+            providerMessageId: data.messages?.[0]?.id ?? data.message_id,
+          };
         }
 
         if (response.status >= 400 && response.status < 500) {
