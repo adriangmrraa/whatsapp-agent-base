@@ -48,13 +48,14 @@ should be described **once** in the registry and projected per transport.
 
 ```ts
 interface DecisionLayer {
-  name: string;                                  // "jev" | "laya"
+  name: string;                                  // "jev" | "laya" | "hosted:{engine}"
+  decideSet(input: SystemOneInput): Promise<SystemOneDecision[]>;
   decide(input: SystemOneInput): Promise<SystemOneDecision>;
 }
 type SystemOneDecision = {
   kind: "choice" | "score" | "gate" | "abstain";
   label: string; choice?: string; score?: number; allow?: boolean;
-  reason: string; provider: string;
+  reason: string; provider: string; ttl?: number;
 };
 ```
 
@@ -62,7 +63,15 @@ type SystemOneDecision = {
   (no network): intent (`commercial` / `support` / `handoff` / `other`) and a
   gate. Default provider is **Jev**; **Laya** is a swappable alternative behind
   the same interface.
-- `decideForTurn()` — never throws; degrades to `abstain` (allow) on failure.
+- `createHostedDecisionLayer` — fetch adapter for a hosted Jev/Laya API
+  (`POST {baseUrl}/v1/decisions`), resolved per tenant when
+  `agent_config.decision_*` (or `DECISION_*` env) provides apiKey + baseUrl.
+  Hosted calls run behind a per-process circuit breaker (3 failures in 60s →
+  60s cooldown) and ANY failure falls through to the rules layer.
+- `decideForTurn()` — never throws; an outage degrades to `abstain` whose
+  `allow` follows the label's degradation posture (`LABEL_DEGRADATION`:
+  `intent`/`capability-group` fail open, `risk`/`role`/`escalation` and
+  unknown labels fail closed).
 
 **Where it runs:** consulted *before* `generateText` in the customer flow
 (`src/lib/agent/index.ts`), and intended to run at the same point in the
@@ -70,6 +79,12 @@ internal voice flow. Today a `gate` decision that disallows the turn suppresses
 the toolset (the model still answers, without acting); the customer handoff path
 stays owned upstream by the session policy. When a hosted Jev/Laya API is
 configured it replaces the rules layer without touching either agent.
+
+**Data flow (hosted):** each turn sends the message `text` + numeric
+`tenantId` + a context allowlist (`sessionState`, `role`, `channel`) to
+`decision_base_url` — never phone numbers, names, or provider external ids
+(see `docs/security.md`). Request bodies are never logged; only the decision
+kind/choice/reason is.
 
 ### Internal voice agent — interfaces implemented, plumbing planned
 

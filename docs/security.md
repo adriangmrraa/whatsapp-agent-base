@@ -11,6 +11,7 @@
 | Duplicate side effects | Effect-claim table (unique conversation+episode+effect+claimant) |
 | Webhook flooding | Upstash rate limit per IP on every webhook route |
 | Provider outage / retry storms | Queue + DLQ, circuit breaker, bounded retries (never retry 4xx) |
+| PII egress to hosted decision API | Only the per-turn `text` + numeric `tenantId` go to `decision_base_url`; context is an allowlist (`sessionState`, `role`, `channel`); phone, names and provider external ids are never sent; `decision_api_key` stays AES-256 at rest, travels only as Bearer, never logged |
 | AuthZ | NextAuth credentials → JWT carries `tenantId` + `role` (`owner\|admin\|viewer`) |
 
 ## Fail-closed rules
