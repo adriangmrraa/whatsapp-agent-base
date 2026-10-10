@@ -37,7 +37,7 @@ Usage:
   bash harness/install.sh --agent claude --dry-run
 
 Flags:
-  --agent <codex|opencode|claude>   pick the agent's skills dir
+  --agent <codex|opencode|claude|cursor|devin>   pick the agent's skills dir
   --target <dir>                    explicit skills dir (overrides --agent)
   --global                          install under $HOME instead of the project
   --dry-run                         print what would happen, change nothing
@@ -48,11 +48,12 @@ EOF
 
 agent_dir() {
   case "$1" in
-    codex | agents) echo ".agents/skills" ;;
+    codex | agents | devin) echo ".agents/skills" ;;
     opencode) echo ".opencode/skills" ;;
     claude | claude-code) echo ".claude/skills" ;;
+    cursor) echo ".cursor/skills" ;;
     *)
-      echo "install.sh: unknown agent '$1' (use: codex | opencode | claude)" >&2
+      echo "install.sh: unknown agent '$1' (use: codex | opencode | claude | cursor | devin)" >&2
       exit 2
       ;;
   esac
