@@ -41,6 +41,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: record.email,
           name: record.name,
           role: record.role,
+          tenantId: record.tenantId,
         };
       },
     }),
@@ -53,16 +54,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // know that, so we guard with a fallback.
         const uid = user.id ? parseInt(user.id, 10) : 0;
         token.id = uid;
-        token.role = (user as { role: "admin" | "viewer" }).role;
+        token.role = (user as { role: "owner" | "admin" | "viewer" }).role;
+        token.tenantId = (user as { tenantId?: number }).tenantId ?? 0;
       }
       return token as JWT;
     },
     session({ session, token }) {
       if (session.user) {
         (session.user as { id: number }).id = (token as JWT & { id: number }).id;
-        (session.user as { role: "admin" | "viewer" }).role = (
-          token as JWT & { role: "admin" | "viewer" }
+        (session.user as { role: "owner" | "admin" | "viewer" }).role = (
+          token as JWT & { role: "owner" | "admin" | "viewer" }
         ).role;
+        (session.user as { tenantId: number }).tenantId = (
+          token as JWT & { tenantId: number }
+        ).tenantId;
       }
       return session;
     },
@@ -75,11 +80,13 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: number;
-      role: "admin" | "viewer";
+      role: "owner" | "admin" | "viewer";
+      tenantId: number;
     } & import("next-auth").DefaultSession["user"];
   }
 
   interface User {
-    role: "admin" | "viewer";
+    role: "owner" | "admin" | "viewer";
+    tenantId?: number;
   }
 }

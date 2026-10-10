@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { products } from "@/db/schema";
 import { eq, asc, ilike, and, sql } from "drizzle-orm";
 import { z } from "zod";
+import { requireTenantId } from "@/lib/tenants";
 
 const PAGE_SIZE = 20;
 
@@ -76,12 +77,17 @@ const updateProductSchema = z.object({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function buildWhereClause(params: {
-  q?: string;
-  category?: string;
-  line?: string;
-}) {
-  const conditions: ReturnType<typeof eq | typeof ilike>[] = [];
+function buildWhereClause(
+  tenantId: number,
+  params: {
+    q?: string;
+    category?: string;
+    line?: string;
+  },
+) {
+  const conditions: ReturnType<typeof eq | typeof ilike>[] = [
+    eq(products.tenantId, tenantId),
+  ];
 
   if (params.q) {
     conditions.push(ilike(products.name, `%${params.q}%`));
@@ -134,9 +140,10 @@ export async function fetchProductsAction(params: {
   category?: string;
   line?: string;
 }): Promise<FetchProductsResult> {
+  const tenantId = await requireTenantId();
   const page = Math.max(1, params.page ?? 1);
   const offset = (page - 1) * PAGE_SIZE;
-  const where = buildWhereClause(params);
+  const where = buildWhereClause(tenantId, params);
 
   const [{ count: total }] = await db
     .select({ count: sql<number>`count(*)` })
@@ -155,11 +162,13 @@ export async function fetchProductsAction(params: {
   const categoryRows = await db
     .select({ value: products.category })
     .from(products)
+    .where(eq(products.tenantId, tenantId))
     .groupBy(products.category);
 
   const lineRows = await db
     .select({ value: products.line })
     .from(products)
+    .where(eq(products.tenantId, tenantId))
     .groupBy(products.line);
 
   return {
@@ -178,6 +187,7 @@ export async function fetchProductsAction(params: {
 // ─── Create ──────────────────────────────────────────────────────────────────
 
 export async function createProductAction(data: unknown) {
+  const tenantId = await requireTenantId();
   const parsed = createProductSchema.safeParse(data);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid data" };
@@ -187,6 +197,7 @@ export async function createProductAction(data: unknown) {
 
   await db.insert(products).values({
     ...rest,
+    tenantId,
     price: rest.price?.toString() ?? null,
     imageUrl: rest.imageUrl ?? null,
     variants: variants ?? [],
@@ -200,6 +211,7 @@ export async function createProductAction(data: unknown) {
 // ─── Update ──────────────────────────────────────────────────────────────────
 
 export async function updateProductAction(id: number, data: unknown) {
+  const tenantId = await requireTenantId();
   const parsed = updateProductSchema.safeParse(data);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid data" };
@@ -222,7 +234,7 @@ export async function updateProductAction(id: number, data: unknown) {
   await db
     .update(products)
     .set(updateData)
-    .where(eq(products.id, id));
+    .where(and(eq(products.id, id), eq(products.tenantId, tenantId)));
 
   revalidatePath("/admin/products");
   return { success: true };
@@ -231,7 +243,10 @@ export async function updateProductAction(id: number, data: unknown) {
 // ─── Delete ──────────────────────────────────────────────────────────────────
 
 export async function deleteProductAction(id: number) {
-  await db.delete(products).where(eq(products.id, id));
+  const tenantId = await requireTenantId();
+  await db
+    .delete(products)
+    .where(and(eq(products.id, id), eq(products.tenantId, tenantId)));
   revalidatePath("/admin/products");
   return { success: true };
 }
@@ -242,10 +257,11 @@ export async function toggleProductAvailabilityAction(
   id: number,
   available: boolean,
 ) {
+  const tenantId = await requireTenantId();
   await db
     .update(products)
     .set({ available, updatedAt: new Date() })
-    .where(eq(products.id, id));
+    .where(and(eq(products.id, id), eq(products.tenantId, tenantId)));
 
   revalidatePath("/admin/products");
   return { success: true };

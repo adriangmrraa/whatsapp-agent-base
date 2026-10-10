@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { orders, leads, conversations } from "@/db/schema";
 import { sql, eq, desc, gte, lt, and, or } from "drizzle-orm";
 import { auth } from "@/auth";
+import { requireTenantId } from "@/lib/tenants";
 import { revalidatePath } from "next/cache";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -61,27 +62,30 @@ function tiempoRelativo(fecha: Date): string {
 // ─── Stats ─────────────────────────────────────────────────────────────────
 
 export async function getStatsAction(): Promise<DashboardStats> {
+  const tenantId = await requireTenantId();
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const [totalOrdersRes] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(orders);
+    .from(orders)
+    .where(eq(orders.tenantId, tenantId));
 
   const [ordersTodayRes] = await db
     .select({ count: sql<number>`count(*)` })
     .from(orders)
-    .where(gte(orders.createdAt, todayStart));
+    .where(and(eq(orders.tenantId, tenantId), gte(orders.createdAt, todayStart)));
 
   const [newClientsRes] = await db
     .select({ count: sql<number>`count(distinct ${leads.phone})` })
     .from(leads)
-    .where(gte(leads.createdAt, weekAgo));
+    .where(and(eq(leads.tenantId, tenantId), gte(leads.createdAt, weekAgo)));
 
   const [totalLeadsRes] = await db
     .select({ count: sql<number>`count(*)` })
-    .from(leads);
+    .from(leads)
+    .where(eq(leads.tenantId, tenantId));
 
   return {
     totalOrders: Number(totalOrdersRes?.count ?? 0),
@@ -94,6 +98,7 @@ export async function getStatsAction(): Promise<DashboardStats> {
 // ─── Recent Activity ───────────────────────────────────────────────────────
 
 export async function getRecentActivityAction(): Promise<ActivityItem[]> {
+  const tenantId = await requireTenantId();
   const [recentLeads, recentOrders] = await Promise.all([
     db
       .select({
@@ -103,6 +108,7 @@ export async function getRecentActivityAction(): Promise<ActivityItem[]> {
         createdAt: leads.createdAt,
       })
       .from(leads)
+      .where(eq(leads.tenantId, tenantId))
       .orderBy(desc(leads.createdAt))
       .limit(5),
     db
@@ -113,6 +119,7 @@ export async function getRecentActivityAction(): Promise<ActivityItem[]> {
         createdAt: orders.createdAt,
       })
       .from(orders)
+      .where(eq(orders.tenantId, tenantId))
       .orderBy(desc(orders.createdAt))
       .limit(5),
   ]);
@@ -143,6 +150,7 @@ export async function getRecentActivityAction(): Promise<ActivityItem[]> {
 // ─── Action Cards ─────────────────────────────────────────────────────────
 
 export async function getActionCardsAction(): Promise<ActionCard[]> {
+  const tenantId = await requireTenantId();
   const now = new Date();
   const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
   const twentyFourHAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -160,7 +168,7 @@ export async function getActionCardsAction(): Promise<ActionCard[]> {
           createdAt: orders.createdAt,
         })
         .from(orders)
-        .where(eq(orders.status, "ready"))
+        .where(and(eq(orders.status, "ready"), eq(orders.tenantId, tenantId)))
         .orderBy(desc(orders.createdAt))
         .limit(5),
 
@@ -174,7 +182,7 @@ export async function getActionCardsAction(): Promise<ActionCard[]> {
           createdAt: orders.createdAt,
         })
         .from(orders)
-        .where(and(eq(orders.status, "preparing"), lt(orders.createdAt, thirtyMinAgo)))
+        .where(and(eq(orders.status, "preparing"), lt(orders.createdAt, thirtyMinAgo), eq(orders.tenantId, tenantId)))
         .orderBy(desc(orders.createdAt))
         .limit(5),
 
@@ -190,6 +198,7 @@ export async function getActionCardsAction(): Promise<ActionCard[]> {
         .from(orders)
         .where(
           and(
+            eq(orders.tenantId, tenantId),
             eq(orders.paymentStatus, "pending"),
             or(eq(orders.status, "pending"), eq(orders.status, "preparing"), eq(orders.status, "ready")),
           ),
@@ -207,7 +216,7 @@ export async function getActionCardsAction(): Promise<ActionCard[]> {
         })
         .from(conversations)
         .where(
-          and(eq(conversations.status, "active"), lt(conversations.lastMessageAt, twentyFourHAgo)),
+          and(eq(conversations.tenantId, tenantId), eq(conversations.status, "active"), lt(conversations.lastMessageAt, twentyFourHAgo)),
         )
         .orderBy(desc(conversations.lastMessageAt))
         .limit(5),
@@ -221,7 +230,7 @@ export async function getActionCardsAction(): Promise<ActionCard[]> {
           createdAt: leads.createdAt,
         })
         .from(leads)
-        .where(and(eq(leads.status, "new"), gte(leads.createdAt, twentyFourHAgo)))
+        .where(and(eq(leads.tenantId, tenantId), eq(leads.status, "new"), gte(leads.createdAt, twentyFourHAgo)))
         .orderBy(desc(leads.createdAt))
         .limit(5),
     ]);
@@ -338,8 +347,7 @@ function isCashOnDelivery(paymentMethod: string | null): boolean {
 export async function markOrderDeliveredAction(
   orderId: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session) return { success: false, error: "No autorizado" };
+  const tenantId = await requireTenantId();
 
   try {
     const [order] = await db
@@ -348,7 +356,7 @@ export async function markOrderDeliveredAction(
         paymentStatus: orders.paymentStatus,
       })
       .from(orders)
-      .where(eq(orders.id, orderId))
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)))
       .limit(1);
 
     if (!order) return { success: false, error: "Pedido no encontrado" };
@@ -365,7 +373,7 @@ export async function markOrderDeliveredAction(
         updatedAt: new Date(),
         ...(isCod ? { paymentStatus: "paid" } : {}),
       })
-      .where(eq(orders.id, orderId));
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)));
 
     revalidatePath("/admin");
     return { success: true };
@@ -377,14 +385,13 @@ export async function markOrderDeliveredAction(
 export async function markOrderReadyAction(
   orderId: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session) return { success: false, error: "No autorizado" };
+  const tenantId = await requireTenantId();
 
   try {
     await db
       .update(orders)
       .set({ status: "ready", updatedAt: new Date() })
-      .where(eq(orders.id, orderId));
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)));
 
     revalidatePath("/admin");
     return { success: true };
@@ -396,14 +403,13 @@ export async function markOrderReadyAction(
 export async function markOrderPaidAction(
   orderId: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await auth();
-  if (!session) return { success: false, error: "No autorizado" };
+  const tenantId = await requireTenantId();
 
   try {
     const [order] = await db
       .select({ status: orders.status })
       .from(orders)
-      .where(eq(orders.id, orderId))
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)))
       .limit(1);
 
     if (!order) return { success: false, error: "Pedido no encontrado" };
@@ -417,7 +423,7 @@ export async function markOrderPaidAction(
         updatedAt: new Date(),
         ...(advanceStatus ? { status: advanceStatus } : {}),
       })
-      .where(eq(orders.id, orderId));
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)));
 
     revalidatePath("/admin");
     return { success: true };

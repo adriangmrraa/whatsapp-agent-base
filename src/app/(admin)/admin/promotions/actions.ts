@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { promotions } from "@/db/schema";
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc, count, and } from "drizzle-orm";
+import { requireTenantId } from "@/lib/tenants";
 import { z } from "zod";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -52,16 +53,19 @@ const PAGE_SIZE = 20;
 export async function fetchPromotionsAction({
   page = 1,
 }: { page?: number } = {}): Promise<PaginatedResult> {
+  const tenantId = await requireTenantId();
   const offset = (page - 1) * PAGE_SIZE;
+  const where = eq(promotions.tenantId, tenantId);
 
   const [rows, totalResult] = await Promise.all([
     db
       .select()
       .from(promotions)
+      .where(where)
       .orderBy(desc(promotions.createdAt))
       .limit(PAGE_SIZE)
       .offset(Math.max(0, offset)),
-    db.select({ total: count() }).from(promotions),
+    db.select({ total: count() }).from(promotions).where(where),
   ]);
 
   const total = totalResult[0]?.total ?? 0;
@@ -85,6 +89,7 @@ export async function fetchPromotionsAction({
 // ─── Create ──────────────────────────────────────────────────────────────────
 
 export async function createPromotionAction(data: z.infer<typeof createSchema>) {
+  const tenantId = await requireTenantId();
   const parsed = createSchema.safeParse(data);
   if (!parsed.success) {
     return {
@@ -95,6 +100,7 @@ export async function createPromotionAction(data: z.infer<typeof createSchema>) 
 
   try {
     await db.insert(promotions).values({
+      tenantId,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       customPrice:
@@ -118,6 +124,7 @@ export async function updatePromotionAction(
   id: number,
   data: z.infer<typeof updateSchema>,
 ) {
+  const tenantId = await requireTenantId();
   const parsed = updateSchema.safeParse(data);
   if (!parsed.success) {
     return {
@@ -137,7 +144,10 @@ export async function updatePromotionAction(
       updates.imageUrl = parsed.data.imageUrl;
     if (parsed.data.active !== undefined) updates.active = parsed.data.active;
 
-    await db.update(promotions).set(updates).where(eq(promotions.id, id));
+    await db
+      .update(promotions)
+      .set(updates)
+      .where(and(eq(promotions.id, id), eq(promotions.tenantId, tenantId)));
 
     revalidatePath("/admin/promotions");
     return { success: true as const };
@@ -149,8 +159,11 @@ export async function updatePromotionAction(
 // ─── Delete ──────────────────────────────────────────────────────────────────
 
 export async function deletePromotionAction(id: number) {
+  const tenantId = await requireTenantId();
   try {
-    await db.delete(promotions).where(eq(promotions.id, id));
+    await db
+      .delete(promotions)
+      .where(and(eq(promotions.id, id), eq(promotions.tenantId, tenantId)));
     revalidatePath("/admin/promotions");
     return { success: true as const };
   } catch {
@@ -161,11 +174,12 @@ export async function deletePromotionAction(id: number) {
 // ─── Toggle Active ───────────────────────────────────────────────────────────
 
 export async function togglePromotionActiveAction(id: number, active: boolean) {
+  const tenantId = await requireTenantId();
   try {
     await db
       .update(promotions)
       .set({ active, updatedAt: new Date() })
-      .where(eq(promotions.id, id));
+      .where(and(eq(promotions.id, id), eq(promotions.tenantId, tenantId)));
 
     revalidatePath("/admin/promotions");
     return { success: true as const };

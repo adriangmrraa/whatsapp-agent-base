@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { orders, orderStatusEnum } from "@/db/schema";
 import { eq, desc, and, count, ilike, or, sql, type SQL } from "drizzle-orm";
+import { requireTenantId } from "@/lib/tenants";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -56,11 +57,12 @@ export async function fetchOrdersAction(params: {
   page?: number;
   pageSize?: number;
 }): Promise<FetchOrdersResponse> {
+  const tenantId = await requireTenantId();
   const page = Math.max(1, params.page ?? 1);
   const pageSize = params.pageSize ?? PAGE_SIZE;
   const offset = (page - 1) * pageSize;
 
-  const conditions: SQL[] = [];
+  const conditions: SQL[] = [eq(orders.tenantId, tenantId)];
 
   if (params.status && ["pending", "preparing", "ready", "delivered", "cancelled"].includes(params.status)) {
     conditions.push(eq(orders.status, params.status as OrderStatus));
@@ -104,7 +106,7 @@ export async function fetchOrdersAction(params: {
       const [r] = await db
         .select({ n: count() })
         .from(orders)
-        .where(eq(orders.status, s));
+        .where(and(eq(orders.status, s), eq(orders.tenantId, tenantId)));
       return { status: s, count: Number(r?.n ?? 0) };
     }),
   );
@@ -126,11 +128,12 @@ export async function updateOrderStatusAction(
   id: number,
   newStatus: OrderStatus,
 ): Promise<{ success: boolean; error?: string }> {
+  const tenantId = await requireTenantId();
   try {
     const [order] = await db
       .select({ status: orders.status })
       .from(orders)
-      .where(eq(orders.id, id))
+      .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)))
       .limit(1);
 
     if (!order) {
@@ -154,7 +157,10 @@ export async function updateOrderStatusAction(
       updateData.deliveredAt = new Date();
     }
 
-    await db.update(orders).set(updateData).where(eq(orders.id, id));
+    await db
+      .update(orders)
+      .set(updateData)
+      .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)));
 
     revalidatePath("/admin/orders");
     return { success: true };
@@ -169,11 +175,12 @@ export async function updateOrderStatusAction(
 export async function markOrderPaymentAction(
   id: number,
 ): Promise<{ success: boolean; error?: string }> {
+  const tenantId = await requireTenantId();
   try {
     const [order] = await db
       .select({ status: orders.status, paymentStatus: orders.paymentStatus })
       .from(orders)
-      .where(eq(orders.id, id))
+      .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)))
       .limit(1);
 
     if (!order) {
@@ -190,7 +197,10 @@ export async function markOrderPaymentAction(
       updateData.status = "preparing";
     }
 
-    await db.update(orders).set(updateData).where(eq(orders.id, id));
+    await db
+      .update(orders)
+      .set(updateData)
+      .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)));
 
     revalidatePath("/admin/orders");
     return { success: true };
@@ -205,8 +215,11 @@ export async function markOrderPaymentAction(
 export async function deleteOrderAction(
   id: number,
 ): Promise<{ success: boolean; error?: string }> {
+  const tenantId = await requireTenantId();
   try {
-    await db.delete(orders).where(eq(orders.id, id));
+    await db
+      .delete(orders)
+      .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)));
     revalidatePath("/admin/orders");
     return { success: true };
   } catch (e) {

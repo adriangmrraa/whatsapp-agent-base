@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { leads } from "@/db/schema";
 import { eq, desc, and, or, ilike, sql, count } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requireTenantId } from "@/lib/tenants";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -59,10 +60,13 @@ export interface FetchLeadsResult {
 export async function fetchLeadsAction(
   params: FetchLeadsParams,
 ): Promise<FetchLeadsResult> {
+  const tenantId = await requireTenantId();
   const { status, page = 1, q, pageSize = 20 } = params;
   const offset = (page - 1) * pageSize;
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(leads.tenantId, tenantId),
+  ];
 
   if (status) {
     conditions.push(eq(leads.status, status));
@@ -98,6 +102,7 @@ export async function fetchLeadsAction(
         count: sql<number>`count(*)`,
       })
       .from(leads)
+      .where(eq(leads.tenantId, tenantId))
       .groupBy(leads.status),
   ]);
 
@@ -154,10 +159,11 @@ export async function fetchLeadsAction(
 // ─── Get Single Lead ────────────────────────────────────────────────────────
 
 export async function getLeadAction(id: number) {
+  const tenantId = await requireTenantId();
   const [lead] = await db
     .select()
     .from(leads)
-    .where(eq(leads.id, id))
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)))
     .limit(1);
 
   return lead ?? null;
@@ -176,6 +182,7 @@ export async function updateLeadAction(
     status?: LeadStatus;
   },
 ) {
+  const tenantId = await requireTenantId();
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.phone !== undefined) updateData.phone = data.phone;
@@ -189,7 +196,7 @@ export async function updateLeadAction(
   await db
     .update(leads)
     .set(updateData)
-    .where(eq(leads.id, id));
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
 
   revalidatePath("/admin/leads");
   return { success: true };
@@ -198,9 +205,10 @@ export async function updateLeadAction(
 // ─── Delete Lead ────────────────────────────────────────────────────────────
 
 export async function deleteLeadAction(id: number) {
+  const tenantId = await requireTenantId();
   await db
     .delete(leads)
-    .where(eq(leads.id, id));
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
 
   revalidatePath("/admin/leads");
   return { success: true };

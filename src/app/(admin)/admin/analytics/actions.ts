@@ -2,6 +2,7 @@
 
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
+import { requireTenantId } from "@/lib/tenants";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export interface TopProduct {
 // delivery fee for paid orders.
 
 export async function getOrdersTimeSeries(days: 7 | 30 = 7): Promise<DaySeries[]> {
+  const tenantId = await requireTenantId();
   const interval = `${days} days`;
 
   const result = await db.execute(sql`
@@ -47,12 +49,12 @@ export async function getOrdersTimeSeries(days: 7 | 30 = 7): Promise<DaySeries[]
               COALESCE((item->>'quantity')::numeric, 1) * COALESCE(p.price::numeric, 0)
             )
             FROM jsonb_array_elements(o.items) AS item
-            LEFT JOIN products p ON p.name = item->>'productName'
+            LEFT JOIN products p ON p.name = item->>'productName' AND p.tenant_id = ${tenantId}
           ), 0
         ) + COALESCE(o.delivery_fee::numeric, 0)
       ), 0) AS revenue
     FROM orders o
-    WHERE o.created_at >= NOW() - ${interval}::interval
+    WHERE o.tenant_id = ${tenantId} AND o.created_at >= NOW() - ${interval}::interval
     GROUP BY DATE_TRUNC('day', o.created_at)
     ORDER BY date ASC
   `);
@@ -70,6 +72,7 @@ export async function getOrdersTimeSeries(days: 7 | 30 = 7): Promise<DaySeries[]
 // (looked up from products table) plus delivery fees.
 
 export async function getRevenueStats(): Promise<RevenueStats> {
+  const tenantId = await requireTenantId();
   const result = await db.execute(sql`
     WITH revenue_data AS (
       SELECT
@@ -80,11 +83,11 @@ export async function getRevenueStats(): Promise<RevenueStats> {
               COALESCE((item->>'quantity')::numeric, 1) * COALESCE(p.price::numeric, 0)
             )
             FROM jsonb_array_elements(o.items) AS item
-            LEFT JOIN products p ON p.name = item->>'productName'
+            LEFT JOIN products p ON p.name = item->>'productName' AND p.tenant_id = ${tenantId}
           ), 0
         ) + COALESCE(o.delivery_fee::numeric, 0) AS revenue
       FROM orders o
-      WHERE o.payment_status = 'paid'
+      WHERE o.tenant_id = ${tenantId} AND o.payment_status = 'paid'
     )
     SELECT
       COUNT(*)::int AS total_orders,
@@ -105,11 +108,13 @@ export async function getRevenueStats(): Promise<RevenueStats> {
 // ─── getLeadConversionStats ────────────────────────────────────────────────────
 
 export async function getLeadConversionStats(): Promise<LeadConversionStats> {
+  const tenantId = await requireTenantId();
   const result = await db.execute(sql`
     SELECT
       COUNT(*)::int AS total,
       COALESCE(SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END), 0)::int AS converted
     FROM leads
+    WHERE tenant_id = ${tenantId}
   `);
 
   const rows = (result as { rows: Record<string, unknown>[] }).rows ?? [];
@@ -129,11 +134,13 @@ export async function getLeadConversionStats(): Promise<LeadConversionStats> {
 // array, aggregates by name, and returns the most frequently ordered products.
 
 export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
+  const tenantId = await requireTenantId();
   const result = await db.execute(sql`
     SELECT
       item->>'productName' AS name,
       SUM(COALESCE((item->>'quantity')::int, 1))::int AS count
     FROM orders, jsonb_array_elements(items) AS item
+    WHERE orders.tenant_id = ${tenantId}
     GROUP BY item->>'productName'
     ORDER BY count DESC
     LIMIT ${limit}

@@ -22,10 +22,10 @@ export default function AdminSidebar() {
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-collapsed");
-    if (stored === "true") {
-      setCollapsed(true);
-    }
-    setMounted(true);
+    queueMicrotask(() => {
+      if (stored === "true") setCollapsed(true);
+      setMounted(true);
+    });
   }, []);
 
   const toggleCollapsed = () => {

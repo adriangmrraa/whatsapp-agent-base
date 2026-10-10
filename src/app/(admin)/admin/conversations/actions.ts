@@ -3,16 +3,22 @@
 import { db } from "@/db";
 import { conversations, chatMessages, leads, orders } from "@/db/schema";
 import { eq, desc, asc, and, sql, count } from "drizzle-orm";
-import { sendText } from "@/lib/ycloud";
-import { saveMessage } from "@/lib/ycloud/conversation";
+import { sendOutboundMessage } from "@/lib/channels/router";
+import { requireTenantId } from "@/lib/tenants";
 import type { ConversationSummary, Message } from "@/types/chat";
 
-// ─── Actions ──────────────────────────────────────────────────────────────────
+// ─── Actions (tenant-scoped) ─────────────────────────────────────────────────
+//
+// Every query filters by the session tenant — requireTenantId() throws when
+// there is no authenticated admin session, so cross-tenant reads/writes are
+// impossible.
 
 /**
  * Retrieve all active conversations with lead info and message counts.
  */
 export async function getConversationsAction(): Promise<ConversationSummary[]> {
+  const tenantId = await requireTenantId();
+
   const rows = await db
     .select({
       id: conversations.id,
@@ -32,6 +38,7 @@ export async function getConversationsAction(): Promise<ConversationSummary[]> {
       )`,
     })
     .from(conversations)
+    .where(eq(conversations.tenantId, tenantId))
     .orderBy(
       sql`COALESCE(${conversations.lastMessageAt}, ${conversations.updatedAt}) DESC`,
     )
@@ -63,10 +70,17 @@ export async function getConversationsAction(): Promise<ConversationSummary[]> {
 export async function getConversationMessagesAction(
   conversationId: number,
 ): Promise<Message[]> {
+  const tenantId = await requireTenantId();
+
   const rows = await db
     .select()
     .from(chatMessages)
-    .where(eq(chatMessages.conversationId, conversationId))
+    .where(
+      and(
+        eq(chatMessages.conversationId, conversationId),
+        eq(chatMessages.tenantId, tenantId),
+      ),
+    )
     .orderBy(asc(chatMessages.createdAt))
     .limit(200);
 
@@ -87,45 +101,45 @@ export async function getConversationMessagesAction(
 }
 
 /**
- * Send a reply from the admin to the customer.
- * Saves the message as "human" role and sends via YCloud WhatsApp API.
+ * Send a human reply from the admin inbox. The channel router resolves the
+ * owning provider (YCloud / Meta / Chatwoot), persists the message, mirrors
+ * it into Chatwoot when enabled, and marks a 24h human override.
  */
 export async function sendReplyAction(
   conversationId: number,
   content: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const tenantId = await requireTenantId();
+
   try {
     const [conv] = await db
-      .select({
-        id: conversations.id,
-        customerPhone: conversations.customerPhone,
-      })
+      .select({ id: conversations.id })
       .from(conversations)
-      .where(eq(conversations.id, conversationId))
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.tenantId, tenantId),
+        ),
+      )
       .limit(1);
 
     if (!conv) {
       return { success: false, error: "Conversación no encontrada" };
     }
 
-    // Save message in DB
-    await saveMessage(conversationId, "human", content);
-
-    // Send via WhatsApp if we have a phone number
-    if (conv.customerPhone) {
-      const result = await sendText(conv.customerPhone, content);
-      if (!result.ok) {
-        return { success: false, error: result.error };
-      }
+    const result = await sendOutboundMessage({
+      conversationId,
+      content,
+      role: "human",
+    });
+    if (!result.ok) {
+      return { success: false, error: result.error };
     }
 
     return { success: true };
   } catch (error) {
     console.error("[sendReplyAction] Error:", error);
-    return {
-      success: false,
-      error: "Error al enviar mensaje",
-    };
+    return { success: false, error: "Error al enviar mensaje" };
   }
 }
 
@@ -137,11 +151,18 @@ export async function sendReplyAction(
 export async function toggleHumanOverrideAction(
   conversationId: number,
 ): Promise<{ success: boolean; active: boolean; error?: string }> {
+  const tenantId = await requireTenantId();
+
   try {
     const [conv] = await db
       .select({ humanOverrideUntil: conversations.humanOverrideUntil })
       .from(conversations)
-      .where(eq(conversations.id, conversationId))
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.tenantId, tenantId),
+        ),
+      )
       .limit(1);
 
     if (!conv) {
@@ -158,10 +179,7 @@ export async function toggleHumanOverrideAction(
 
     await db
       .update(conversations)
-      .set({
-        humanOverrideUntil: until,
-        updatedAt: new Date(),
-      })
+      .set({ humanOverrideUntil: until, updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
 
     return { success: true, active: !isCurrentlyActive };
@@ -178,6 +196,8 @@ export async function updateLeadAction(
   leadId: number,
   data: { name?: string; phone?: string; notes?: string },
 ): Promise<{ success: boolean; error?: string }> {
+  const tenantId = await requireTenantId();
+
   try {
     const updateData: Record<string, unknown> = {};
     if (data.name !== undefined) updateData.name = data.name;
@@ -191,7 +211,7 @@ export async function updateLeadAction(
     await db
       .update(leads)
       .set(updateData)
-      .where(eq(leads.id, leadId));
+      .where(and(eq(leads.id, leadId), eq(leads.tenantId, tenantId)));
 
     return { success: true };
   } catch (error) {
@@ -204,26 +224,28 @@ export async function updateLeadAction(
  * Get lead associated with a conversation (by conversationId or phone).
  */
 export async function getLeadByConversationAction(conversationId: number) {
-  // First try: direct link via conversationId
+  const tenantId = await requireTenantId();
+
   let [lead] = await db
     .select()
     .from(leads)
-    .where(eq(leads.conversationId, conversationId))
+    .where(and(eq(leads.conversationId, conversationId), eq(leads.tenantId, tenantId)))
     .limit(1);
 
-  // Second try: by phone number
   if (!lead) {
     const [conv] = await db
       .select({ customerPhone: conversations.customerPhone })
       .from(conversations)
-      .where(eq(conversations.id, conversationId))
+      .where(
+        and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)),
+      )
       .limit(1);
 
     if (conv?.customerPhone) {
       [lead] = await db
         .select()
         .from(leads)
-        .where(eq(leads.phone, conv.customerPhone))
+        .where(and(eq(leads.phone, conv.customerPhone), eq(leads.tenantId, tenantId)))
         .limit(1);
     }
   }
@@ -235,10 +257,12 @@ export async function getLeadByConversationAction(conversationId: number) {
  * Get orders for a given lead.
  */
 export async function getOrdersByLeadAction(leadId: number) {
+  const tenantId = await requireTenantId();
+
   return db
     .select()
     .from(orders)
-    .where(eq(orders.leadId, leadId))
+    .where(and(eq(orders.leadId, leadId), eq(orders.tenantId, tenantId)))
     .orderBy(desc(orders.createdAt))
     .limit(20);
 }

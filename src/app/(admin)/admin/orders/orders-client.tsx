@@ -18,6 +18,7 @@ import {
   updateOrderStatusAction,
   markOrderPaymentAction,
   deleteOrderAction,
+  type OrderStatus,
   type OrderRow,
 } from "./actions";
 import { Badge } from "@/components/ui/badge";
@@ -130,7 +131,8 @@ function OrderCard({
         switch (action) {
           case "next":
             const next = NEXT_STATUS[order.status];
-            if (next) await updateOrderStatusAction(order.id, next as any);
+            if (next)
+              await updateOrderStatusAction(order.id, next as OrderStatus);
             break;
           case "cancel":
             await updateOrderStatusAction(order.id, "cancelled");

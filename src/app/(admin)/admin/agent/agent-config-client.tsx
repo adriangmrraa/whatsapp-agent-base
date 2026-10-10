@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useRef, useCallback, type ReactNode } from "react";
+import { useActionState, useState, useRef, useCallback, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   ChevronDown,
@@ -67,12 +67,25 @@ type ConfigFormState = {
   estimatedWaitTime: string;
   catalogImageUrls: string;
 
-  // Meta OAuth
-  metaAccessToken: string;
-  metaTokenExpiresAt: string;
+  // AI Provider (OpenAI-compatible)
+  aiApiKey: string;
+  aiBaseUrl: string;
+  aiModel: string;
+  aiModelFast: string;
+  aiModelVision: string;
+
+  // Meta OAuth (token lives in `credentials` — only status is editable here)
   metaBusinessName: string;
   metaPhoneNumberId: string;
+  metaWabaId: string;
   metaConnected: boolean;
+
+  // Chatwoot
+  chatwootEnabled: boolean;
+  chatwootBaseUrl: string;
+  chatwootAccountId: string;
+  chatwootInboxId: string;
+  chatwootMode: string;
 };
 
 function configToForm(config: AgentConfigData | null): ConfigFormState {
@@ -117,14 +130,27 @@ function configToForm(config: AgentConfigData | null): ConfigFormState {
     estimatedWaitTime: config?.estimatedWaitTime ?? "",
     catalogImageUrls: JSON.stringify(config?.catalogImageUrls ?? [], null, 2),
 
+    // AI Provider
+    aiApiKey: config?.aiApiKey ?? "",
+    aiBaseUrl: config?.aiBaseUrl ?? "",
+    aiModel: config?.aiModel ?? "",
+    aiModelFast: config?.aiModelFast ?? "",
+    aiModelVision: config?.aiModelVision ?? "",
+
     // Meta OAuth
-    metaAccessToken: config?.metaAccessToken ?? "",
-    metaTokenExpiresAt: config?.metaTokenExpiresAt
-      ? new Date(config.metaTokenExpiresAt).toISOString().slice(0, 16)
-      : "",
     metaBusinessName: config?.metaBusinessName ?? "",
     metaPhoneNumberId: config?.metaPhoneNumberId ?? "",
+    metaWabaId: config?.metaWabaId ?? "",
     metaConnected: config?.metaConnected ?? false,
+
+    // Chatwoot
+    chatwootEnabled: config?.chatwootEnabled ?? false,
+    chatwootBaseUrl: config?.chatwootBaseUrl ?? "",
+    chatwootAccountId:
+      config?.chatwootAccountId != null ? String(config.chatwootAccountId) : "",
+    chatwootInboxId:
+      config?.chatwootInboxId != null ? String(config.chatwootInboxId) : "",
+    chatwootMode: config?.chatwootMode ?? "inbox",
   };
 }
 
@@ -211,22 +237,44 @@ function formStateToDb(
     }),
     catalogImageUrls: parseJson(state.catalogImageUrls),
 
-    // Meta OAuth
-    ...(state.metaAccessToken !== undefined && {
-      metaAccessToken: state.metaAccessToken || null,
+    // AI Provider
+    ...(state.aiApiKey !== undefined && {
+      aiApiKey: state.aiApiKey || null,
     }),
-    ...(state.metaTokenExpiresAt !== undefined && {
-      metaTokenExpiresAt: state.metaTokenExpiresAt
-        ? new Date(state.metaTokenExpiresAt)
-        : null,
+    ...(state.aiBaseUrl !== undefined && {
+      aiBaseUrl: state.aiBaseUrl || null,
     }),
+    ...(state.aiModel !== undefined && { aiModel: state.aiModel || null }),
+    ...(state.aiModelFast !== undefined && {
+      aiModelFast: state.aiModelFast || null,
+    }),
+    ...(state.aiModelVision !== undefined && {
+      aiModelVision: state.aiModelVision || null,
+    }),
+
+    // Meta OAuth (status fields only — tokens live in the credentials table)
     ...(state.metaBusinessName !== undefined && {
       metaBusinessName: state.metaBusinessName || null,
     }),
     ...(state.metaPhoneNumberId !== undefined && {
       metaPhoneNumberId: state.metaPhoneNumberId || null,
     }),
-    metaConnected: state.metaConnected,
+    ...(state.metaWabaId !== undefined && {
+      metaWabaId: state.metaWabaId || null,
+    }),
+
+    // Chatwoot
+    chatwootEnabled: state.chatwootEnabled,
+    ...(state.chatwootBaseUrl !== undefined && {
+      chatwootBaseUrl: state.chatwootBaseUrl || null,
+    }),
+    chatwootAccountId: state.chatwootAccountId
+      ? Number(state.chatwootAccountId)
+      : null,
+    chatwootInboxId: state.chatwootInboxId ? Number(state.chatwootInboxId) : null,
+    ...(state.chatwootMode !== undefined && {
+      chatwootMode: state.chatwootMode || "inbox",
+    }),
   };
 }
 
@@ -246,7 +294,9 @@ const SECTIONS: SectionDef[] = [
   { key: "whatsapp-agent", icon: <Bot className="size-4" />, title: "WhatsApp Agent", description: "Prompt, instrucciones y promociones del agente IA" },
   { key: "business-ops", icon: <Briefcase className="size-4" />, title: "Operaciones", description: "Horarios, delivery y zonas de entrega" },
   { key: "business-status", icon: <BarChart3 className="size-4" />, title: "Estado del Negocio", description: "Activo, stock, alias y URLs del catálogo" },
-  { key: "meta-oauth", icon: <Lock className="size-4" />, title: "Meta OAuth", description: "Token de acceso, negocio y conexión Meta" },
+  { key: "ai-provider", icon: <Bot className="size-4" />, title: "AI Provider", description: "Proveedor OpenAI-compatible y modelos" },
+  { key: "meta-oauth", icon: <Lock className="size-4" />, title: "Meta Business", description: "Conexión OAuth con Meta WhatsApp Business" },
+  { key: "chatwoot", icon: <MessageSquare className="size-4" />, title: "Chatwoot", description: "Bandeja humana externa (opcional)" },
 ];
 
 // ─── Field Helpers ─────────────────────────────────────────────────────────
@@ -338,7 +388,9 @@ interface AgentConfigClientProps {
 export function AgentConfigClient({ initialConfig }: AgentConfigClientProps) {
   const [form, setForm] = useState<ConfigFormState>(() => configToForm(initialConfig));
   const formRef = useRef(form);
-  formRef.current = form;
+  useEffect(() => {
+    formRef.current = form;
+  }, [form]);
 
   const [openSections, setOpenSections] = useState<Set<string>>(
     () => new Set(["general"]),
@@ -423,8 +475,14 @@ export function AgentConfigClient({ initialConfig }: AgentConfigClientProps) {
             {section.key === "business-status" && (
               <BusinessStatusFields form={form} updateField={updateField} />
             )}
+            {section.key === "ai-provider" && (
+              <AIProviderFields form={form} updateField={updateField} />
+            )}
             {section.key === "meta-oauth" && (
               <MetaOAuthFields form={form} updateField={updateField} />
+            )}
+            {section.key === "chatwoot" && (
+              <ChatwootFields form={form} updateField={updateField} />
             )}
           </CollapsibleSection>
         ))}
@@ -826,9 +884,157 @@ function BusinessStatusFields({
   );
 }
 
-// ─── Meta OAuth Fields ─────────────────────────────────────────────────────
+// ─── AI Provider Fields ────────────────────────────────────────────────────
+
+function AIProviderFields({
+  form,
+  updateField,
+}: {
+  form: ConfigFormState;
+  updateField: <K extends keyof ConfigFormState>(k: K, v: ConfigFormState[K]) => void;
+}) {
+  return (
+    <>
+      <FieldRow label="API Key (OpenAI-compatible)" htmlFor="aiApiKey">
+        <Input
+          id="aiApiKey"
+          type="password"
+          value={form.aiApiKey}
+          onChange={(e) => updateField("aiApiKey", e.target.value)}
+          placeholder="sk-... (vacío = usa OPENAI_API_KEY del entorno)"
+        />
+      </FieldRow>
+
+      <FieldRow label="Base URL" htmlFor="aiBaseUrl">
+        <Input
+          id="aiBaseUrl"
+          value={form.aiBaseUrl}
+          onChange={(e) => updateField("aiBaseUrl", e.target.value)}
+          placeholder="https://api.openai.com/v1"
+        />
+      </FieldRow>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <FieldRow label="Modelo principal" htmlFor="aiModel">
+          <Input
+            id="aiModel"
+            value={form.aiModel}
+            onChange={(e) => updateField("aiModel", e.target.value)}
+            placeholder="gpt-5-mini"
+          />
+        </FieldRow>
+        <FieldRow label="Modelo rápido" htmlFor="aiModelFast">
+          <Input
+            id="aiModelFast"
+            value={form.aiModelFast}
+            onChange={(e) => updateField("aiModelFast", e.target.value)}
+            placeholder="gpt-5-nano"
+          />
+        </FieldRow>
+        <FieldRow label="Modelo visión" htmlFor="aiModelVision">
+          <Input
+            id="aiModelVision"
+            value={form.aiModelVision}
+            onChange={(e) => updateField("aiModelVision", e.target.value)}
+            placeholder="gpt-5-mini"
+          />
+        </FieldRow>
+      </div>
+    </>
+  );
+}
+
+// ─── Meta Business (OAuth) ─────────────────────────────────────────────────
 
 function MetaOAuthFields({
+  form,
+  updateField,
+}: {
+  form: ConfigFormState;
+  updateField: <K extends keyof ConfigFormState>(k: K, v: ConfigFormState[K]) => void;
+}) {
+  const [connecting, setConnecting] = useState(false);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const res = await fetch("/api/meta/connect", { method: "POST" });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      toast.error(data.error ?? "No se pudo iniciar la conexión con Meta");
+    } catch {
+      toast.error("No se pudo iniciar la conexión con Meta");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <Switch id="metaConnected" checked={form.metaConnected} disabled />
+        <Label htmlFor="metaConnected" className="cursor-default">
+          {form.metaConnected ? "Meta conectado" : "Meta no conectado"}
+        </Label>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleConnect}
+          disabled={connecting}
+          className="w-fit gap-2"
+        >
+          {connecting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Lock className="size-4" />
+          )}
+          {form.metaConnected ? "Reconectar con Meta" : "Conectar con Meta"}
+        </Button>
+        <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
+          El token se guarda cifrado en la base de datos — nunca se muestra acá.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <FieldRow label="Meta Business Name" htmlFor="metaBusinessName">
+          <Input
+            id="metaBusinessName"
+            value={form.metaBusinessName}
+            onChange={(e) => updateField("metaBusinessName", e.target.value)}
+            placeholder="Mi Negocio"
+          />
+        </FieldRow>
+        <FieldRow label="Meta Phone Number ID" htmlFor="metaPhoneNumberId">
+          <Input
+            id="metaPhoneNumberId"
+            value={form.metaPhoneNumberId}
+            onChange={(e) => updateField("metaPhoneNumberId", e.target.value)}
+            placeholder="123456789012345"
+          />
+        </FieldRow>
+      </div>
+
+      <FieldRow label="WhatsApp Business Account ID" htmlFor="metaWabaId">
+        <Input
+          id="metaWabaId"
+          value={form.metaWabaId}
+          onChange={(e) => updateField("metaWabaId", e.target.value)}
+          placeholder="98765432109876"
+        />
+      </FieldRow>
+    </>
+  );
+}
+
+// ─── Chatwoot Fields ───────────────────────────────────────────────────────
+
+function ChatwootFields({
   form,
   updateField,
 }: {
@@ -839,50 +1045,57 @@ function MetaOAuthFields({
     <>
       <div className="flex items-center gap-3">
         <Switch
-          id="metaConnected"
-          checked={form.metaConnected}
-          onCheckedChange={(v) => updateField("metaConnected", v)}
+          id="chatwootEnabled"
+          checked={form.chatwootEnabled}
+          onCheckedChange={(v) => updateField("chatwootEnabled", v)}
         />
-        <Label htmlFor="metaConnected" className="cursor-pointer">Meta conectado</Label>
+        <Label htmlFor="chatwootEnabled" className="cursor-pointer">
+          Chatwoot habilitado
+        </Label>
       </div>
 
-      <FieldRow label="Meta Access Token" htmlFor="metaAccessToken">
+      <FieldRow label="Base URL" htmlFor="chatwootBaseUrl">
         <Input
-          id="metaAccessToken"
-          value={form.metaAccessToken}
-          onChange={(e) => updateField("metaAccessToken", e.target.value)}
-          placeholder="EAAG... access token"
+          id="chatwootBaseUrl"
+          value={form.chatwootBaseUrl}
+          onChange={(e) => updateField("chatwootBaseUrl", e.target.value)}
+          placeholder="https://app.chatwoot.com"
         />
       </FieldRow>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <FieldRow label="Token Expira" htmlFor="metaTokenExpiresAt">
+        <FieldRow label="Account ID" htmlFor="chatwootAccountId">
           <Input
-            id="metaTokenExpiresAt"
-            type="datetime-local"
-            value={form.metaTokenExpiresAt}
-            onChange={(e) => updateField("metaTokenExpiresAt", e.target.value)}
+            id="chatwootAccountId"
+            value={form.chatwootAccountId}
+            onChange={(e) => updateField("chatwootAccountId", e.target.value)}
+            placeholder="1"
           />
         </FieldRow>
-
-        <FieldRow label="Meta Business Name" htmlFor="metaBusinessName">
+        <FieldRow label="Inbox ID" htmlFor="chatwootInboxId">
           <Input
-            id="metaBusinessName"
-            value={form.metaBusinessName}
-            onChange={(e) => updateField("metaBusinessName", e.target.value)}
-            placeholder="Mi Negocio"
+            id="chatwootInboxId"
+            value={form.chatwootInboxId}
+            onChange={(e) => updateField("chatwootInboxId", e.target.value)}
+            placeholder="2"
           />
         </FieldRow>
       </div>
 
-      <FieldRow label="Meta Phone Number ID" htmlFor="metaPhoneNumberId">
+      <FieldRow label="Modo" htmlFor="chatwootMode">
         <Input
-          id="metaPhoneNumberId"
-          value={form.metaPhoneNumberId}
-          onChange={(e) => updateField("metaPhoneNumberId", e.target.value)}
-          placeholder="123456789012345"
+          id="chatwootMode"
+          value={form.chatwootMode}
+          onChange={(e) => updateField("chatwootMode", e.target.value)}
+          placeholder='inbox | mirror'
         />
       </FieldRow>
+
+      <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
+        El API token de Chatwoot se configura en la sección de credenciales
+        (tabla credentials, provider=&quot;chatwoot&quot;, key=&quot;api_token&quot;)
+        o vía env CHATWOOT_API_TOKEN.
+      </p>
     </>
   );
 }

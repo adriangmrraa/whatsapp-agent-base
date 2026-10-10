@@ -160,13 +160,15 @@ export function LeadsClient({
 
   // Sync form when selected lead changes
   useEffect(() => {
-    if (selectedLead) {
-      setEditName(selectedLead.name ?? "");
-      setEditPhone(selectedLead.phone);
-      setEditEmail(selectedLead.email ?? "");
-      setEditNotes(selectedLead.notes ?? "");
-      setEditStatus(selectedLead.status);
-    }
+    if (!selectedLead) return;
+    const lead = selectedLead;
+    queueMicrotask(() => {
+      setEditName(lead.name ?? "");
+      setEditPhone(lead.phone);
+      setEditEmail(lead.email ?? "");
+      setEditNotes(lead.notes ?? "");
+      setEditStatus(lead.status);
+    });
   }, [selectedLead]);
 
   // ── URL helpers ──────────────────────────────────────────────────────────
