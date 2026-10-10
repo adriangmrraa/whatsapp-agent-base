@@ -69,6 +69,8 @@ webhook (ycloud | meta | chatwoot)
 | [`docs/channels-meta.md`](docs/channels-meta.md) | Instagram + Facebook (Meta Graph API) — design + adapter checklist |
 | [`docs/security.md`](docs/security.md) | Threat model, credentials, fail-closed rules |
 | [`docs/deployment.md`](docs/deployment.md) | Production checklist, cron, env reference |
+| [`docs/jev-harness.md`](docs/jev-harness.md) | **JEV decision harness** — provider-neutral decision layer (Jev / OpenAI Decisions), memory backends, pack catalog, SDD integration, onboarding |
+| [`docs/jev-harness-ledger.md`](docs/jev-harness-ledger.md) | JEV ledger — how decisions are measured, and the honest caveats |
 | [`docs/for-ai-agents.md`](docs/for-ai-agents.md) | **Guide for AI coding agents** — how to explore, what context to ask for, harness requirements |
 | [`docs/presentations/`](docs/presentations/) | Self-contained HTML decks — open in a browser, no server needed |
 | [`AGENTS.md`](AGENTS.md) | Rules any AI/human agent must follow in this repo |
@@ -95,6 +97,32 @@ The base is intentionally generic. To ship a vertical product (pizzeria, clinic,
 5. Keep every query tenant-scoped — see [`AGENTS.md`](AGENTS.md) for the isolation rules.
 
 See [`docs/for-ai-agents.md`](docs/for-ai-agents.md) if you're driving this repo with a coding agent.
+
+## JEV decision harness
+
+A reusable, **provider-neutral decision layer** ships in this repo: code owns the
+workflow, **Jev** (or **OpenAI Decisions**) owns the bounded semantic decision,
+the LLM owns generation, and **Engram** gives every decision memory and an audit
+trail. It plugs into the local SDD coding-agent flow and is usable by students
+and the community with a single `JEV_API_KEY`.
+
+**Read [`docs/jev-harness.md`](docs/jev-harness.md)** — the canonical doc: the
+provider-neutral contract, the memory backends (`local` / `cloud` / `neon`), the
+14-pack catalog (when to use each + which Jev question type), the SDD
+integration, and the adoption methodology (shadow → measure → A/B → gate →
+calibrate). The measurement approach and the **honest caveats** (what Jev does
+and does *not* do) live in [`docs/jev-harness-ledger.md`](docs/jev-harness-ledger.md).
+
+Quickstart:
+
+```bash
+npm run onboard -- --jev --yes        # env + db + decision smoke-test + skill install
+# then, from an agent: harness/skills/jev-decide (Agent Skill) or harness/mcp (MCP server)
+```
+
+Harness packaging lives in [`harness/`](harness/) — the `jev-decide` Agent Skill,
+an optional stdio MCP server, `install.sh`, and
+[`harness/ONBOARDING.md`](harness/ONBOARDING.md).
 
 ## Roadmap
 
