@@ -142,6 +142,68 @@ provider-neutral contract, the memory backends, the 14-pack catalog (when to use
 **honest caveats** (what Jev does and does *not* do) live in
 [`docs/jev-harness-ledger.md`](docs/jev-harness-ledger.md).
 
+## Agent onboarding (AI-first)
+
+If you are an AI coding agent handed this repository, this is your runbook — the
+human only needs to provide the API key. Goal: wire the JEV decision harness so you
+can call the decision packs while coding, **without changing app behavior**
+(shadow-first, opt-in).
+
+**Read first:** [`docs/jev-harness.md`](docs/jev-harness.md) ·
+[`harness/ONBOARDING.md`](harness/ONBOARDING.md) · [`AGENTS.md`](AGENTS.md).
+
+1. **Key (human).** Ask the human to put `JEV_API_KEY=ts_...` in `.env.local`
+   (alias `TYPESAFE_API_KEY`; or `OPENAI_API_KEY` + `DECISION_ENGINE=openai-decisions`).
+   Secrets are **env-only** — never in JSON, never committed, never printed.
+2. **Plan first.** `npm run onboard -- --dry-run` (changes nothing).
+3. **Onboard.** `npm run onboard -- --jev --yes` — bootstraps `.env.local`, the DB
+   (migrate + seed), runs the decision **smoke test** (proves the key), and installs
+   the `jev-decide` skill.
+4. **Register the MCP server** (so you can call the 14 packs) — add the
+   `jev-harness` entry to `opencode.json`; see [`harness/mcp/README.md`](harness/mcp/README.md).
+5. **Verify.**
+   ```bash
+   node --test harness/mcp/mcp.test.mjs
+   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node harness/mcp/server.mjs   # 14 tools
+   npx tsc --noEmit && npx eslint src && npm test && npm run build   # app gate
+   ```
+6. **Use.** Call the packs for bounded decisions (`jev_file_scope`, `jev_guard`,
+   `jev_workload_forecast`, …) — see `harness/skills/jev-decide/SKILL.md` for when to
+   call each; persist decisions to Engram. Stay in **shadow** until the ledger proves
+   value.
+7. **Measure.** `npm run jev:report`; A/B baseline vs +Jev. Adoption gate: cost ↓ ≥30%,
+   quality ≥0.95×, p95 ≤1.2×.
+
+### Harness configuration (env — all optional; no key ⇒ `rules`, offline)
+
+| Env | Values |
+|---|---|
+| `JEV_API_KEY` / `TYPESAFE_API_KEY` | Jev key |
+| `DECISION_ENGINE` / `DECISION_PROVIDER` | `jev` · `openai-decisions` · `rules` |
+| `JEV_BASE_URL` · `DECISION_MODEL` | endpoint · model (`jev-latest`) |
+| `JEV_MEMORY` | `local` · `cloud` · `neon` |
+| `JEV_MEMORY_PROJECT` · `ENGRAM_HTTP_URL` · `ENGRAM_CLOUD_URL` · `ENGRAM_CLOUD_TOKEN` | memory backend |
+
+### Rollback — return to the current state (nothing breaks)
+
+The harness is **opt-in and additive**; testing never edits `main`'s tracked code
+(`main` stays at the last merge). To fully revert:
+
+```bash
+# 1. disable the decision engine — offline, explicit no-answers
+#    in .env.local: set DECISION_ENGINE=rules  (or remove JEV_API_KEY)
+# 2. remove local test artifacts (all untracked)
+rm -f harness/config.json                     # if created
+rm -rf .opencode/skills/jev-decide            # the installed skill
+# 3. remove the jev-harness MCP entry from opencode.json
+# 4. confirm the repo is unchanged
+git status && git log --oneline -1            # expect: your own WIP only; HEAD unchanged
+```
+
+With `DECISION_ENGINE=rules` (or no key) the provider degrades to `rules` and the
+agent simply doesn't receive Jev answers — **no behavior change, no breakage**. The
+WhatsApp product's own runtime is separate and unaffected.
+
 ## Roadmap
 
 One engine (tools + data + tenant + deterministic decisions + vector memory)
