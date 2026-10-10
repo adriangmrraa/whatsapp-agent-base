@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { eq, and, ilike, desc, asc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import { retrieveKnowledge } from "@/lib/embeddings";
 
 // ─── Agent tools (tenant-scoped factory) ─────────────────────────────────────
 //
@@ -613,6 +614,46 @@ export function buildAgentTools(tenantId: number, phoneNumber: string) {
     },
   });
 
+  // ── searchKnowledge ─────────────────────────────────────────────────────
+  const searchKnowledge = tool({
+    description:
+      "Search the business knowledge base (policies, FAQs, delivery rules, product notes) for facts relevant to the customer's question. Use it before answering anything not covered by the catalog tools.",
+    inputSchema: z.object({
+      query: z.string().min(1).describe("What to look up in the knowledge base"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(10)
+        .optional()
+        .default(3)
+        .describe("Maximum number of knowledge snippets to return (default 3)"),
+    }),
+    execute: async ({ query, limit = 3 }) => {
+      try {
+        const { matches } = await retrieveKnowledge({
+          tenantId,
+          query,
+          k: limit,
+        });
+        if (matches.length === 0) {
+          return { found: false, matches: [], message: "No relevant knowledge found." };
+        }
+        return {
+          found: true,
+          matches: matches.map((match) => ({
+            content: match.content,
+            source: match.source,
+            documentKey: match.documentKey,
+            score: Number(match.score.toFixed(3)),
+          })),
+        };
+      } catch {
+        return { found: false, matches: [], message: "Could not search the knowledge base right now." };
+      }
+    },
+  });
+
   return {
     getBusinessHours,
     getCatalog,
@@ -629,5 +670,6 @@ export function buildAgentTools(tenantId: number, phoneNumber: string) {
     getCustomerHistory,
     suggestProducts,
     addToOrder,
+    searchKnowledge,
   };
 }

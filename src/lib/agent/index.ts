@@ -2,6 +2,7 @@ import { generateText, stepCountIs } from "ai";
 import { buildSystemPrompt, loadConfig, loadCatalog } from "./system-prompt";
 import { buildAgentTools } from "./tools";
 import { getMainChatModel } from "@/lib/ai/config";
+import { retrieveKnowledge } from "@/lib/embeddings";
 import type { ModelMessage } from "ai";
 import logger from "@/lib/logger";
 
@@ -34,7 +35,14 @@ export async function processMessage({
     const businessName =
       (config?.metaBusinessName as string) ?? "mi negocio";
 
-    const systemPrompt = buildSystemPrompt(businessName, catalog, config);
+    // Retrieve tenant knowledge before generating: inject only the relevant
+    // top-k chunks into the prompt. Best-effort — empty context on failure.
+    const knowledge = await retrieveKnowledge({ tenantId, query: text });
+
+    const basePrompt = buildSystemPrompt(businessName, catalog, config);
+    const systemPrompt = knowledge.context
+      ? `${basePrompt}\n\n${knowledge.context}`
+      : basePrompt;
 
     const messages: ModelMessage[] = [
       ...conversationHistory,
