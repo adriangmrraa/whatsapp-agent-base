@@ -1,8 +1,11 @@
 # Channels: Instagram + Facebook (Meta Graph API)
 
-**Status: design + interfaces.** The adapter is not implemented yet; this
-document specifies how it plugs into the existing provider contract. Facts below
-are from the official Meta Graph API docs.
+**Status: implemented (option 1 — one `meta` adapter).** The adapter branches on
+`channels.config.channel` (`whatsapp` | `messenger` | `instagram`) for parse and
+send; WhatsApp, Messenger and Instagram share the webhook, signature scheme and
+verify token. Remaining work is operational: register the `channels` rows, store
+the Page access token, and complete Meta App Review. Facts below are from the
+official Meta Graph API docs.
 
 ## What Meta exposes
 

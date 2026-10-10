@@ -35,7 +35,7 @@ Planned (not yet built — items in parentheses are still in progress):
 - (Embeddings + vector memory — `pgvector` on Postgres, tenant-scoped, retrieve-before-generate.)
 - (System One deterministic decision layer — Jev / Laya — for intent, tool routing, and risk/role gating.)
 - Internal voice agent — OpenAI Realtime API, staff-facing, role-gated.
-- (Sales/attention agent on Instagram + Facebook — Meta Graph API.)
+- Sales/attention agent on Instagram + Facebook — Meta Graph API.
 - (Deploy targets — local, VPS, Render — with Neon Postgres as the default onboarding database.)
 
 ## Stack
@@ -122,7 +122,7 @@ staff agent. Planned items are in parentheses; shipped items are not.
 - (Hosted Jev/Laya decision provider behind `DecisionLayer`)
 - Internal voice agent runtime — Realtime session, audio, tool-call bridge
 - Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order
-- (Instagram + Facebook channels via Meta Graph API)
+- Instagram + Facebook channels via Meta Graph API
 
 ## Verification
 

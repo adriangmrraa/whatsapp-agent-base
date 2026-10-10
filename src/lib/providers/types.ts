@@ -97,6 +97,9 @@ export interface OutboundProvider {
     channelExternalId: string; // the "from"
     to: string;
     payload: OutboundPayload;
+    /** Channel row config (e.g. { channel: "messenger" }) for adapters that
+     *  serve several endpoint families behind one provider. */
+    channelConfig?: Record<string, unknown>;
   }): Promise<SendResult>;
 }
 
