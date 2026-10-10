@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>WhatsApp Agent Base — Story</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Instrument Sans";
+        src: url("assets/fonts/instrument-sans.woff2") format("woff2");
+        font-weight: 400 700;
+        font-style: normal;
+      }
+      :root {
+        --carbon: #0f1217;
+        --carbon2: #151a21;
+        --grid: #1d242c;
+        --paper: #f5f3ee;
+        --muted: rgba(245, 243, 238, 0.72);
+        --green: #25d366;
+        --sol: #f7d116;
+        --ink: #0b0c0f;
+        --mono: "JetBrains Mono", monospace;
+        --sans: "Instrument Sans", sans-serif;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: var(--carbon);
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--carbon);
+        color: var(--paper);
+        font-family: var(--sans);
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* ---------- background ---------- */
+      #grid {
+        position: absolute;
+        inset: -112px;
+        background-image:
+          linear-gradient(var(--grid) 2px, transparent 2px),
+          linear-gradient(90deg, var(--grid) 2px, transparent 2px);
+        background-size: 56px 56px;
+      }
+      .glow {
+        position: absolute;
+        width: 1100px;
+        height: 1100px;
+        border-radius: 50%;
+        left: 0;
+        top: 0;
+      }
+      #glow-sol {
+        background: radial-gradient(circle, rgba(247, 209, 22, 0.26), transparent 66%);
+      }
+      #glow-cel {
+        background: radial-gradient(circle, rgba(37, 211, 102, 0.22), transparent 66%);
+      }
+      #noise {
+        position: absolute;
+        inset: 0;
+        opacity: 0.08;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      .px {
+        position: absolute;
+        display: block;
+      }
+
+      /* ---------- camera ---------- */
+      #cam {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* ---------- header ---------- */
+      #header {
+        position: absolute;
+        top: 196px;
+        left: 68px;
+        right: 68px;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      #header .brand {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      #header .brand svg {
+        width: 74px;
+        height: 74px;
+        display: block;
+      }
+      #header .brand span {
+        font: 700 34px var(--mono);
+        letter-spacing: 0.04em;
+        color: var(--paper);
+      }
+      #header .brand span b {
+        color: var(--green);
+      }
+      .badge {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 26px;
+        border: 2px solid rgba(37, 211, 102, 0.55);
+        border-radius: 12px;
+        background: rgba(21, 26, 33, 0.94);
+        font: 700 24px var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--green);
+      }
+      .badge i {
+        display: block;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--green);
+      }
+
+      /* ---------- route ---------- */
+      #route {
+        position: absolute;
+        left: 76px;
+        right: 76px;
+        bottom: 196px;
+        height: 44px;
+      }
+      #route .line {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: repeating-linear-gradient(90deg, var(--green) 0 18px, transparent 18px 32px);
+        transform-origin: left center;
+      }
+      #route .node {
+        position: absolute;
+        top: -7px;
+        width: 18px;
+        height: 18px;
+        background: var(--green);
+      }
+      #route .node.r {
+        right: 0;
+      }
+      #route .label {
+        position: absolute;
+        top: 22px;
+        font: 700 20px var(--mono);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      #route .label.l {
+        left: 0;
+      }
+      #route .label.r {
+        right: 0;
+        color: var(--sol);
+      }
+      #walker {
+        position: absolute;
+        left: 0;
+        bottom: 10px;
+        width: 92px;
+        height: 115px;
+      }
+      #walker img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        transform-origin: 50% 100%;
+      }
+
+      /* ---------- mascot ---------- */
+      #mascot {
+        position: absolute;
+        right: 6px;
+        bottom: 292px;
+        width: 540px;
+        height: 540px;
+      }
+      #mascot-shadow {
+        position: absolute;
+        left: 110px;
+        right: 110px;
+        bottom: 8px;
+        height: 34px;
+        border-radius: 50%;
+        background: radial-gradient(ellipse, rgba(0, 0, 0, 0.55), transparent 70%);
+      }
+      #mascot-bob,
+      #mascot-tilt {
+        position: absolute;
+        inset: 0;
+        transform-origin: 50% 90%;
+      }
+      #mascot .m {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        opacity: 0;
+        transform-origin: 50% 90%;
+      }
+
+      /* ---------- scene copy ---------- */
+      .copy {
+        position: absolute;
+        left: 76px;
+        right: 76px;
+        top: 380px;
+      }
+      .eyebrow {
+        font: 700 26px var(--mono);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--green);
+        height: 40px;
+        display: flex;
+        align-items: center;
+      }
+      .eyebrow .sol {
+        color: var(--sol);
+      }
+      .caret {
+        display: inline-block;
+        width: 16px;
+        height: 30px;
+        margin-left: 6px;
+        background: var(--green);
+      }
+      .hl {
+        margin-top: 26px;
+        font-family: var(--mono);
+        font-weight: 700;
+        line-height: 0.9;
+        letter-spacing: -0.06em;
+        text-transform: uppercase;
+        color: var(--paper);
+      }
+      .hl .ln {
+        display: block;
+        overflow: hidden;
+        padding: 0.2em 0 0.16em;
+        margin: -0.16em 0 -0.1em;
+      }
+      .hl .in {
+        display: block;
+        transform-origin: 0 100%;
+      }
+      .hl .accent {
+        color: var(--sol);
+      }
+      .desc {
+        margin-top: 36px;
+        max-width: 620px;
+        font: 500 46px/1.2 var(--sans);
+        color: rgba(245, 243, 238, 0.9);
+      }
+      .bar {
+        display: block;
+        height: 12px;
+        width: 330px;
+        margin-top: 10px;
+        background: var(--sol);
+        transform-origin: left center;
+      }
+
+      /* scene 2 cards */
+      .card {
+        width: 780px;
+        height: 150px;
+        margin-top: 22px;
+        display: flex;
+        align-items: center;
+        gap: 30px;
+        padding: 0 32px;
+        background: rgba(21, 26, 33, 0.94);
+        border: 2px solid rgba(37, 211, 102, 0.45);
+        border-radius: 16px;
+      }
+      .card .ic {
+        width: 92px;
+        height: 92px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        border: 2px solid rgba(37, 211, 102, 0.45);
+        border-radius: 14px;
+        background: rgba(37, 211, 102, 0.08);
+      }
+      .card svg path,
+      .card svg rect,
+      .card svg circle,
+      .panel svg path {
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .card small {
+        display: block;
+        font: 700 22px var(--mono);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .card strong {
+        display: block;
+        margin-top: 8px;
+        font: 700 60px/1 var(--mono);
+        letter-spacing: -0.03em;
+        color: var(--sol);
+        text-transform: uppercase;
+      }
+      .cards {
+        margin-top: 40px;
+      }
+
+      /* scene 3 panel */
+      .panel {
+        margin-top: 46px;
+        width: 900px;
+        height: 200px;
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        padding: 0 36px;
+        background: var(--sol);
+        border-radius: 22px;
+        color: var(--ink);
+      }
+      .panel svg {
+        flex: none;
+      }
+      .odo {
+        display: flex;
+        align-items: flex-start;
+        height: 104px;
+        overflow: hidden;
+        font: 700 104px/104px var(--mono);
+        letter-spacing: -0.04em;
+      }
+      .reel {
+        display: block;
+        width: 0.62em;
+        height: 104px;
+        overflow: hidden;
+      }
+      .reel span {
+        display: block;
+        height: 104px;
+        text-align: center;
+      }
+      .reel .strip {
+        display: block;
+      }
+      .odo .sep {
+        display: block;
+        width: 0.42em;
+        text-align: center;
+      }
+      .odo .unit {
+        display: block;
+        margin-left: 0.32em;
+      }
+      .panel small {
+        display: block;
+        margin-top: 12px;
+        font: 700 22px var(--mono);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .chip-free {
+        margin-top: 30px;
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 28px;
+        border: 3px solid var(--sol);
+        border-radius: 12px;
+        background: rgba(247, 209, 22, 0.08);
+        font: 700 32px var(--mono);
+        letter-spacing: 0.14em;
+        color: var(--sol);
+      }
+      .chip-free i {
+        display: block;
+        width: 16px;
+        height: 16px;
+        background: var(--sol);
+      }
+      .fine {
+        margin-top: 24px;
+        font: 700 22px var(--mono);
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      /* scene 4 chips */
+      .chips {
+        margin-top: 40px;
+        max-width: 760px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+      }
+      .chip {
+        display: block;
+        padding: 16px 26px;
+        border: 2px solid rgba(37, 211, 102, 0.55);
+        border-radius: 12px;
+        background: rgba(21, 26, 33, 0.94);
+        font: 700 32px var(--mono);
+        letter-spacing: 0.06em;
+        color: var(--paper);
+      }
+      .chip.hot {
+        border-color: var(--sol);
+        color: var(--sol);
+      }
+
+      /* scene 5 cta */
+      .cta {
+        position: relative;
+        margin-top: 60px;
+        width: 860px;
+        height: 176px;
+        padding: 0 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: var(--sol);
+        border-radius: 22px;
+        color: var(--ink);
+      }
+      .cta small {
+        font: 700 24px var(--mono);
+        letter-spacing: 0.18em;
+      }
+      .cta strong {
+        margin-top: 10px;
+        font: 700 58px/1 var(--mono);
+        letter-spacing: -0.03em;
+      }
+      .ripple {
+        position: absolute;
+        left: 716px;
+        top: 70px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: 4px solid var(--ink);
+      }
+      .cursor {
+        position: absolute;
+        left: 734px;
+        top: 92px;
+        width: 64px;
+        height: 76px;
+      }
+      .note {
+        margin-top: 30px;
+        font: 700 24px var(--mono);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .float {
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        object-fit: contain;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="20"
+      data-width="1080"
+      data-height="1920"
+    >
+      <!-- persistent background -->
+      <div id="bg" class="clip" data-start="0" data-duration="20" data-track-index="0">
+        <div id="grid"></div>
+        <div id="glow-sol" class="glow"></div>
+        <div id="glow-cel" class="glow"></div>
+        <div id="pixels"></div>
+        <div id="noise"></div>
+      </div>
+
+      <div id="cam" class="clip" data-start="0" data-duration="20" data-track-index="1">
+        <!-- header -->
+        <header id="header">
+          <div class="brand logo">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="6" width="40" height="30" rx="9" fill="#25D366" />
+              <path d="M18 36l-2 8 10-8" fill="#25D366" />
+              <path d="M14 18h20M14 24h13" stroke="#0B0C0F" stroke-width="3" stroke-linecap="round" />
+            </svg>
+            <span>WHATSAPP <b>AGENT BASE</b></span>
+          </div>
+          <div class="partners">
+            <div class="badge logo"><i></i>OPEN SOURCE · MIT</div>
+          </div>
+        </header>
+
+        <!-- mascot -->
+        <div id="mascot">
+          <div id="mascot-shadow"></div>
+          <div id="mascot-bob">
+            <div id="mascot-tilt">
+              <img id="m1" class="m" src="assets/img/m1.png" alt="" />
+              <img id="m2" class="m" src="assets/img/m2.png" alt="" />
+              <img id="m3" class="m" src="assets/img/m3.png" alt="" />
+              <img id="m4" class="m" src="assets/img/m4.png" alt="" />
+              <img id="m5" class="m" src="assets/img/m5.png" alt="" />
+            </div>
+          </div>
+        </div>
+
+        <!-- route: un mensaje viaja por el pipeline -->
+        <footer id="route">
+          <div class="line"></div>
+          <div class="node l" style="left: 0"></div>
+          <div class="node r"></div>
+          <span class="label l">Inbound</span>
+          <span class="label r">Reply</span>
+          <div id="walker"><img src="assets/img/walker.png" alt="Mensaje" /></div>
+        </footer>
+      </div>
+
+      <!-- SCENE 1 · hook -->
+      <section id="s1" class="clip" data-start="0" data-duration="4.42" data-track-index="2">
+        <div class="copy">
+          <p class="eyebrow x" data-type="OPEN SOURCE · MULTI-TENANT"></p>
+          <h1 class="hl x" style="font-size: 138px">
+            <span class="ln"><span class="in">Tu SaaS de</span></span>
+            <span class="ln"><span class="in">WhatsApp</span></span>
+            <span class="ln"><span class="in accent">empieza acá.</span></span>
+          </h1>
+          <span class="bar x"></span>
+          <p class="desc x">Motor multi-tenant con IA agnóstica. Vos escribís el producto — el plumbing ya está.</p>
+        </div>
+      </section>
+
+      <!-- SCENE 2 · tenancy -->
+      <section id="s2" class="clip" data-start="4.4" data-duration="4.52" data-track-index="3">
+        <div class="copy">
+          <p class="eyebrow x" data-type="MULTI-TENANT DESDE EL DÍA 1"></p>
+          <h1 class="hl x" style="font-size: 150px">
+            <span class="ln"><span class="in">Cada cliente,</span></span>
+            <span class="ln"><span class="in accent">su mundo.</span></span>
+          </h1>
+          <div class="cards">
+            <div class="card x">
+              <div class="ic">
+                <svg width="56" height="56" viewBox="0 0 24 24">
+                  <rect class="draw" x="3" y="4" width="18" height="5" rx="1.5" pathLength="1" stroke="#25D366" stroke-width="2" />
+                  <rect class="draw" x="3" y="11" width="18" height="5" rx="1.5" pathLength="1" stroke="#25D366" stroke-width="2" />
+                  <rect class="draw" x="3" y="18" width="18" height="3" rx="1.5" pathLength="1" stroke="#25D366" stroke-width="2" />
+                </svg>
+              </div>
+              <div>
+                <small>Aislamiento total</small>
+                <strong>tenant_id</strong>
+              </div>
+            </div>
+            <div class="card x">
+              <div class="ic">
+                <svg width="56" height="56" viewBox="0 0 24 24">
+                  <rect class="draw" x="5" y="10" width="14" height="10" rx="2" pathLength="1" stroke="#25D366" stroke-width="2" />
+                  <path class="draw" d="M8 10V7a4 4 0 0 1 8 0v3" pathLength="1" stroke="#25D366" stroke-width="2" />
+                  <circle class="draw" cx="12" cy="15" r="1.8" pathLength="1" stroke="#25D366" stroke-width="2" />
+                </svg>
+              </div>
+              <div>
+                <small>Credenciales por tenant</small>
+                <strong>AES-256</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 3 · providers -->
+      <section id="s3" class="clip" data-start="8.9" data-duration="4.56" data-track-index="4">
+        <div class="copy">
+          <p class="eyebrow x" data-type="YCLOUD · META · CHATWOOT"></p>
+          <h1 class="hl x" style="font-size: 116px">
+            <span class="ln"><span class="in">Una interfaz,</span></span>
+            <span class="ln"><span class="in accent">tres canales.</span></span>
+          </h1>
+          <div class="panel x">
+            <svg width="96" height="96" viewBox="0 0 24 24">
+              <path class="draw" d="M9 7h6M12 4v3M12 14v6M5 12a7 7 0 0 1 14 0v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" pathLength="1" stroke="#0B0C0F" stroke-width="2" />
+            </svg>
+            <div>
+              <div class="odo" aria-label="3 providers">
+                <span class="reel"><span class="strip" data-d="3"></span></span>
+                <span class="unit">PROVIDERS</span>
+              </div>
+              <small>MessagingProvider · sendText · verify · parse</small>
+            </div>
+          </div>
+          <div class="chip-free x"><i></i>AGREGÁ EL TUYO EN ~150 LÍNEAS</div>
+          <p class="fine x">YCloud · Meta Cloud API · Chatwoot incluidos.</p>
+        </div>
+        <img class="float" id="f-api" src="assets/img/float-api.png" alt="" style="left: 860px; top: 560px" />
+      </section>
+
+      <!-- SCENE 4 · engine -->
+      <section id="s4" class="clip" data-start="13.42" data-duration="4.0" data-track-index="5">
+        <div class="copy">
+          <p class="eyebrow x" data-type="MOTOR DE IA AGNÓSTICO"></p>
+          <h1 class="hl x" style="font-size: 150px">
+            <span class="ln"><span class="in">El modelo</span></span>
+            <span class="ln"><span class="in accent">lo elegís vos.</span></span>
+          </h1>
+          <p class="desc x" style="margin-top: 26px; max-width: 820px">OpenAI-compatible, por tenant. Sesiones durables y handoff a humano incluidos.</p>
+          <div class="chips x">
+            <span class="chip">SESSION CAS</span>
+            <span class="chip">BUFFER + DEDUP</span>
+            <span class="chip hot">HANDOFF 24H</span>
+            <span class="chip">RATE LIMIT</span>
+            <span class="chip">DLQ</span>
+            <span class="chip hot">IDEMPOTENTE</span>
+            <span class="chip">FAIL CLOSED</span>
+          </div>
+        </div>
+        <img class="float" id="f-lock" src="assets/img/float-lock.png" alt="" style="left: 880px; top: 470px" />
+      </section>
+
+      <!-- SCENE 5 · cta -->
+      <section id="s5" class="clip" data-start="17.4" data-duration="2.6" data-track-index="6">
+        <div class="copy">
+          <p class="eyebrow" data-type="WHATSAPP AGENT BASE"></p>
+          <h1 class="hl" style="font-size: 150px">
+            <span class="ln"><span class="in">Cloná.</span></span>
+            <span class="ln"><span class="in accent">Construí.</span></span>
+          </h1>
+          <div class="cta">
+            <small>GITHUB.COM/ADRIANGMRRAA</small>
+            <strong>whatsapp-agent-base</strong>
+            <div class="ripple"></div>
+            <svg class="cursor" viewBox="0 0 32 38">
+              <path d="M3 2l24 20-11 1.5 6.5 11.5-4.5 2.5L11.5 25 3 32z" fill="#F5F3EE" stroke="#0B0C0F" stroke-width="2.5" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <p class="note">MIT · docs/ · AGENTS.md incluido</p>
+        </div>
+      </section>
+
+      <!-- SFX -->
+      <audio id="sfx-01" src="assets/sfx/whoosh-short.mp3" data-start="0.12" data-duration="0.57" data-track-index="10" data-volume="0.5"></audio>
+      <audio id="sfx-02" src="assets/sfx/click-soft.mp3" data-start="0.32" data-duration="0.36" data-track-index="11" data-volume="0.45"></audio>
+      <audio id="sfx-03" src="assets/sfx/typing.mp3" data-start="0.55" data-duration="0.8" data-track-index="12" data-volume="0.3"></audio>
+      <audio id="sfx-04" src="assets/sfx/whoosh-short.mp3" data-start="0.62" data-duration="0.57" data-track-index="13" data-volume="0.45"></audio>
+      <audio id="sfx-05" src="assets/sfx/pop.mp3" data-start="1.28" data-duration="0.7" data-track-index="10" data-volume="0.32"></audio>
+      <audio id="sfx-06" src="assets/sfx/pop.mp3" data-start="1.42" data-duration="0.7" data-track-index="11" data-volume="0.32"></audio>
+      <audio id="sfx-07" src="assets/sfx/pop.mp3" data-start="1.56" data-duration="0.7" data-track-index="12" data-volume="0.45"></audio>
+      <audio id="sfx-08" src="assets/sfx/whoosh-short.mp3" data-start="1.95" data-duration="0.57" data-track-index="13" data-volume="0.3"></audio>
+      <audio id="sfx-09" src="assets/sfx/click-soft.mp3" data-start="2.3" data-duration="0.36" data-track-index="10" data-volume="0.35"></audio>
+
+      <audio id="sfx-10" src="assets/sfx/whoosh.mp3" data-start="3.92" data-duration="0.57" data-track-index="11" data-volume="0.6"></audio>
+      <audio id="sfx-11" src="assets/sfx/pop.mp3" data-start="4.42" data-duration="0.7" data-track-index="12" data-volume="0.4"></audio>
+      <audio id="sfx-12" src="assets/sfx/typing.mp3" data-start="4.45" data-duration="0.55" data-track-index="13" data-volume="0.25"></audio>
+      <audio id="sfx-13" src="assets/sfx/pop.mp3" data-start="4.85" data-duration="0.7" data-track-index="10" data-volume="0.32"></audio>
+      <audio id="sfx-14" src="assets/sfx/pop.mp3" data-start="5.0" data-duration="0.7" data-track-index="11" data-volume="0.45"></audio>
+      <audio id="sfx-15" src="assets/sfx/click.mp3" data-start="5.55" data-duration="0.36" data-track-index="12" data-volume="0.55"></audio>
+      <audio id="sfx-16" src="assets/sfx/click.mp3" data-start="5.9" data-duration="0.36" data-track-index="13" data-volume="0.55"></audio>
+      <audio id="sfx-17" src="assets/sfx/ping.mp3" data-start="6.45" data-duration="1.0" data-track-index="10" data-volume="0.22"></audio>
+
+      <audio id="sfx-18" src="assets/sfx/whoosh.mp3" data-start="8.42" data-duration="0.57" data-track-index="11" data-volume="0.6"></audio>
+      <audio id="sfx-19" src="assets/sfx/pop.mp3" data-start="8.95" data-duration="0.7" data-track-index="12" data-volume="0.4"></audio>
+      <audio id="sfx-20" src="assets/sfx/typing.mp3" data-start="8.9" data-duration="0.6" data-track-index="13" data-volume="0.25"></audio>
+      <audio id="sfx-21" src="assets/sfx/pop.mp3" data-start="9.32" data-duration="0.7" data-track-index="10" data-volume="0.32"></audio>
+      <audio id="sfx-22" src="assets/sfx/pop.mp3" data-start="9.47" data-duration="0.7" data-track-index="11" data-volume="0.45"></audio>
+      <audio id="sfx-23" src="assets/sfx/whoosh-short.mp3" data-start="9.75" data-duration="0.57" data-track-index="12" data-volume="0.5"></audio>
+      <audio id="sfx-24" src="assets/sfx/typing.mp3" data-start="10.05" data-duration="1.25" data-track-index="13" data-volume="0.35"></audio>
+      <audio id="sfx-25" src="assets/sfx/ping.mp3" data-start="11.3" data-duration="1.3" data-track-index="10" data-volume="0.4"></audio>
+      <audio id="sfx-26" src="assets/sfx/pop.mp3" data-start="11.75" data-duration="0.7" data-track-index="11" data-volume="0.5"></audio>
+      <audio id="sfx-27" src="assets/sfx/click-soft.mp3" data-start="12.15" data-duration="0.36" data-track-index="12" data-volume="0.3"></audio>
+
+      <audio id="sfx-28" src="assets/sfx/whoosh.mp3" data-start="12.92" data-duration="0.57" data-track-index="13" data-volume="0.6"></audio>
+      <audio id="sfx-29" src="assets/sfx/typing.mp3" data-start="13.4" data-duration="0.55" data-track-index="10" data-volume="0.25"></audio>
+      <audio id="sfx-30" src="assets/sfx/pop.mp3" data-start="13.82" data-duration="0.7" data-track-index="11" data-volume="0.32"></audio>
+      <audio id="sfx-31" src="assets/sfx/pop.mp3" data-start="13.97" data-duration="0.7" data-track-index="12" data-volume="0.45"></audio>
+      <audio id="sfx-32" src="assets/sfx/click-soft.mp3" data-start="14.75" data-duration="0.36" data-track-index="13" data-volume="0.4"></audio>
+      <audio id="sfx-33" src="assets/sfx/click-soft.mp3" data-start="14.9" data-duration="0.36" data-track-index="10" data-volume="0.4"></audio>
+      <audio id="sfx-34" src="assets/sfx/pop.mp3" data-start="15.05" data-duration="0.7" data-track-index="11" data-volume="0.4"></audio>
+      <audio id="sfx-35" src="assets/sfx/click-soft.mp3" data-start="15.2" data-duration="0.36" data-track-index="12" data-volume="0.4"></audio>
+      <audio id="sfx-36" src="assets/sfx/click-soft.mp3" data-start="15.35" data-duration="0.36" data-track-index="13" data-volume="0.4"></audio>
+      <audio id="sfx-37" src="assets/sfx/pop.mp3" data-start="15.5" data-duration="0.7" data-track-index="10" data-volume="0.4"></audio>
+      <audio id="sfx-38" src="assets/sfx/click-soft.mp3" data-start="15.65" data-duration="0.36" data-track-index="14" data-volume="0.4"></audio>
+
+      <audio id="sfx-39" src="assets/sfx/whoosh.mp3" data-start="16.92" data-duration="0.57" data-track-index="12" data-volume="0.6"></audio>
+      <audio id="sfx-40" src="assets/sfx/typing.mp3" data-start="17.4" data-duration="0.8" data-track-index="13" data-volume="0.25"></audio>
+      <audio id="sfx-41" src="assets/sfx/pop.mp3" data-start="17.62" data-duration="0.7" data-track-index="10" data-volume="0.32"></audio>
+      <audio id="sfx-42" src="assets/sfx/pop.mp3" data-start="17.77" data-duration="0.7" data-track-index="11" data-volume="0.45"></audio>
+      <audio id="sfx-43" src="assets/sfx/whoosh-short.mp3" data-start="18.15" data-duration="0.57" data-track-index="12" data-volume="0.4"></audio>
+      <audio id="sfx-44" src="assets/sfx/click.mp3" data-start="18.72" data-duration="0.36" data-track-index="13" data-volume="0.85"></audio>
+      <audio id="sfx-45" src="assets/sfx/sparkle.mp3" data-start="18.78" data-duration="1.2" data-track-index="10" data-volume="0.35"></audio>
+      <audio id="sfx-46" src="assets/sfx/chime.mp3" data-start="19.05" data-duration="0.95" data-track-index="11" data-volume="0.4"></audio>
+    </div>
+
+    <script>
+      (function () {
+        // ---------- deterministic setup ----------
+        let seed = 7;
+        const rand = () => {
+          seed = (seed * 16807) % 2147483647;
+          return (seed - 1) / 2147483646;
+        };
+
+        const pixels = document.getElementById("pixels");
+        const PX = [];
+        for (let i = 0; i < 14; i++) {
+          const s = 10 + Math.round(rand() * 14);
+          const el = document.createElement("span");
+          el.className = "px";
+          el.style.width = s + "px";
+          el.style.height = s + "px";
+          el.style.left = Math.round(40 + rand() * 1000) + "px";
+          el.style.top = Math.round(330 + rand() * 1300) + "px";
+          el.style.background = i % 3 === 0 ? "#F7D116" : "#25D366";
+          el.style.opacity = (0.18 + rand() * 0.35).toFixed(2);
+          pixels.appendChild(el);
+          PX.push({ el, dur: 2.2 + rand() * 2.4, dy: 16 + rand() * 30, dx: -12 + rand() * 24 });
+        }
+
+        document.querySelectorAll("[data-type]").forEach((el) => {
+          const text = el.getAttribute("data-type");
+          el.innerHTML =
+            [...text]
+              .map((c) => {
+                const cls = c === "×" ? "ch sol" : "ch";
+                return `<span class="${cls}">${c === " " ? "&nbsp;" : c}</span>`;
+              })
+              .join("") + '<span class="caret"></span>';
+        });
+
+        const DIGIT_H = 104;
+        document.querySelectorAll(".strip").forEach((strip) => {
+          let html = "";
+          for (let r = 0; r < 3; r++) for (let d = 0; d < 10; d++) html += `<span>${d}</span>`;
+          strip.innerHTML = html;
+        });
+
+        // ---------- timeline ----------
+        const tl = gsap.timeline({ paused: true });
+        const D = 20;
+
+        // ambient background
+        tl.fromTo("#grid", { x: 0, y: 0 }, { x: -112, y: -56, duration: D, ease: "none" }, 0);
+        tl.fromTo("#glow-sol", { x: 380, y: 300, scale: 0.9 }, { x: 420, y: 340, scale: 1, duration: 4, ease: "sine.inOut" }, 0);
+        tl.fromTo("#glow-cel", { x: -560, y: 1200, scale: 1 }, { x: -520, y: 1150, scale: 1.08, duration: 4, ease: "sine.inOut" }, 0);
+        const glowPath = [
+          [4.1, -420, 500, 300, 1250],
+          [8.6, 300, 520, -500, 1100],
+          [13.1, -380, 380, 420, 1300],
+          [17.1, 120, 600, -460, 900],
+        ];
+        glowPath.forEach(([t, sx, sy, cx, cy]) => {
+          tl.to("#glow-sol", { x: sx, y: sy, scale: 1.05, duration: 2.6, ease: "sine.inOut" }, t);
+          tl.to("#glow-cel", { x: cx, y: cy, scale: 0.95, duration: 2.6, ease: "sine.inOut" }, t);
+        });
+        PX.forEach((p, i) => {
+          const reps = Math.max(0, Math.floor(D / p.dur) - 1);
+          tl.fromTo(p.el, { y: 0, x: 0 }, { y: -p.dy, x: p.dx, duration: p.dur, ease: "sine.inOut", yoyo: true, repeat: reps }, 0.05 * i);
+        });
+
+        // camera breathing
+        tl.fromTo("#cam", { scale: 1.04 }, { scale: 1, duration: 1.4, ease: "power3.out" }, 0);
+        tl.to("#cam", { scale: 1.012, duration: 2.6, ease: "sine.inOut", yoyo: true, repeat: 6 }, 1.4);
+
+        // header
+        tl.fromTo("#header .logo", { y: -60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: "back.out(1.8)", stagger: 0.08 }, 0.12);
+
+        // route
+        tl.fromTo("#route .line", { scaleX: 0 }, { scaleX: 1, duration: 1.1, ease: "power3.inOut" }, 0.3);
+        tl.fromTo("#route .node", { scale: 0 }, { scale: 1, duration: 0.4, ease: "back.out(2.5)", stagger: 0.7 }, 0.3);
+        tl.fromTo("#route .label", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", stagger: 0.4 }, 0.7);
+        tl.fromTo("#walker", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: "power2.out" }, 0.9);
+
+        const ROUTE_W = 928 - 92;
+        const walk = (t, p, dur) => {
+          tl.to("#walker", { x: ROUTE_W * p, duration: dur, ease: "power1.inOut" }, t);
+          const steps = Math.max(1, Math.round(dur / 0.22));
+          tl.to("#walker img", { y: -12, rotation: 5, duration: dur / (steps * 2), ease: "sine.inOut", yoyo: true, repeat: steps * 2 - 1 }, t);
+          tl.to("#walker img", { y: 0, rotation: 0, duration: 0.2, ease: "power2.out" }, t + dur);
+        };
+        walk(4.2, 0.25, 1.2);
+        walk(8.7, 0.5, 1.2);
+        walk(13.2, 0.75, 1.2);
+        walk(17.2, 1, 1.5);
+        tl.fromTo("#walker img", { scale: 1 }, { scale: 1.18, duration: 0.25, ease: "power2.out", yoyo: true, repeat: 1 }, 18.8);
+
+        // mascot
+        tl.fromTo("#m1", { opacity: 0, x: 420, rotation: 10, scale: 0.9 }, { opacity: 1, x: 0, rotation: 0, scale: 1, duration: 1, ease: "back.out(1.4)" }, 0.6);
+        tl.fromTo("#mascot-shadow", { opacity: 0, scaleX: 0.4 }, { opacity: 1, scaleX: 1, duration: 0.9, ease: "power2.out" }, 0.7);
+        tl.fromTo("#mascot-bob", { y: 0 }, { y: -18, duration: 1.4, ease: "sine.inOut", yoyo: true, repeat: 12 }, 1.4);
+        tl.fromTo("#mascot-shadow", { scale: 1 }, { scale: 0.86, duration: 1.4, ease: "sine.inOut", yoyo: true, repeat: 12, immediateRender: false }, 1.6);
+        tl.fromTo("#mascot-tilt", { rotation: -1.5 }, { rotation: 1.5, duration: 2.1, ease: "sine.inOut", yoyo: true, repeat: 8 }, 0.6);
+        const swap = (from, to, t) => {
+          tl.to(from, { opacity: 0, scale: 0.82, y: 50, rotation: -8, duration: 0.32, ease: "power2.in" }, t);
+          tl.fromTo(to, { opacity: 0, scale: 0.72, y: 140, rotation: 8 }, { opacity: 1, scale: 1, y: 0, rotation: 0, duration: 0.8, ease: "back.out(1.7)" }, t + 0.18);
+        };
+        swap("#m1", "#m2", 4.3);
+        swap("#m2", "#m3", 8.8);
+        swap("#m3", "#m4", 13.3);
+        swap("#m4", "#m5", 17.3);
+
+        // shared helpers
+        const typeIn = (scope, t) => {
+          tl.fromTo(`${scope} .eyebrow .ch`, { opacity: 0 }, { opacity: 1, duration: 0.01, stagger: 0.026 }, t);
+          tl.fromTo(`${scope} .eyebrow .caret`, { opacity: 1 }, { opacity: 0, duration: 0.22, ease: "steps(1)", yoyo: true, repeat: 7 }, t);
+        };
+        const linesIn = (scope, t) => {
+          tl.fromTo(`${scope} .hl .in`, { yPercent: 118, rotation: 5 }, { yPercent: 0, rotation: 0, duration: 0.8, ease: "expo.out", stagger: 0.14 }, t);
+        };
+        const fadeUp = (sel, t, extra = {}) => {
+          tl.fromTo(sel, { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: "power3.out", ...extra }, t);
+        };
+        const exitScene = (scope, t) => {
+          tl.to(`${scope} .x`, { y: -90, opacity: 0, duration: 0.38, ease: "power2.in", stagger: 0.04 }, t);
+        };
+
+        // scene 1
+        typeIn("#s1", 0.55);
+        linesIn("#s1", 1.25);
+        tl.fromTo("#s1 .bar", { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.inOut" }, 1.9);
+        fadeUp("#s1 .desc", 2.25);
+        exitScene("#s1", 3.9);
+
+        // scene 2
+        typeIn("#s2", 4.45);
+        linesIn("#s2", 4.82);
+        tl.fromTo("#s2 .card", { x: -140, opacity: 0, scale: 0.95 }, { x: 0, opacity: 1, scale: 1, duration: 0.75, ease: "back.out(1.5)", stagger: 0.35 }, 5.5);
+        tl.fromTo("#s2 .draw", { strokeDasharray: 1, strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.7, ease: "power2.out", stagger: 0.12 }, 5.75);
+        tl.fromTo("#s2 .card strong", { scale: 0.92 }, { scale: 1, duration: 0.5, ease: "back.out(3)", stagger: 0.35, transformOrigin: "0% 50%" }, 5.8);
+        tl.fromTo("#s2 .card .ic", { rotation: -12 }, { rotation: 0, duration: 0.7, ease: "elastic.out(1, 0.5)", stagger: 0.35 }, 5.6);
+        exitScene("#s2", 8.4);
+
+        // scene 3
+        typeIn("#s3", 8.9);
+        linesIn("#s3", 9.28);
+        tl.fromTo("#s3 .panel", { x: -200, opacity: 0, rotation: -2 }, { x: 0, opacity: 1, rotation: 0, duration: 0.8, ease: "back.out(1.4)" }, 9.75);
+        tl.fromTo("#s3 .panel .draw", { strokeDasharray: 1, strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.8, ease: "power2.out" }, 10.0);
+        document.querySelectorAll("#s3 .strip").forEach((strip, i) => {
+          const d = Number(strip.getAttribute("data-d"));
+          tl.fromTo(strip, { y: 0 }, { y: -(20 + d) * DIGIT_H, duration: 1.2 - i * 0.06, ease: "power3.out" }, 10.05 + i * 0.06);
+        });
+        tl.fromTo("#s3 .panel", { scale: 1 }, { scale: 1.035, duration: 0.18, ease: "power2.out", yoyo: true, repeat: 1, immediateRender: false }, 11.3);
+        tl.fromTo("#s3 .chip-free", { y: 30, opacity: 0, scale: 0.7 }, { y: 0, opacity: 1, scale: 1, duration: 0.6, ease: "back.out(2.4)" }, 11.72);
+        fadeUp("#s3 .fine", 12.1);
+        tl.fromTo("#f-api", { opacity: 0, scale: 0.4, rotation: -30 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.8, ease: "back.out(1.8)" }, 9.9);
+        tl.fromTo("#f-api", { y: 0 }, { y: -26, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: 1, immediateRender: false }, 10.7);
+        tl.to("#f-api", { opacity: 0, scale: 0.6, y: -120, duration: 0.4, ease: "power2.in" }, 12.95);
+        exitScene("#s3", 12.9);
+
+        // scene 4
+        typeIn("#s4", 13.4);
+        linesIn("#s4", 13.78);
+        fadeUp("#s4 .desc", 14.35);
+        tl.fromTo("#s4 .chip", { y: 40, opacity: 0, scale: 0.6, rotation: -6 }, { y: 0, opacity: 1, scale: 1, rotation: 0, duration: 0.55, ease: "back.out(2.2)", stagger: 0.15 }, 14.72);
+        tl.fromTo("#f-lock", { opacity: 0, scale: 0.4, rotation: 25 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.8, ease: "back.out(1.8)" }, 14.1);
+        tl.fromTo("#f-lock", { y: 0, rotation: 0 }, { y: -22, rotation: -6, duration: 1, ease: "sine.inOut", yoyo: true, repeat: 1, immediateRender: false }, 14.9);
+        tl.to("#f-lock", { opacity: 0, scale: 0.6, y: -120, duration: 0.4, ease: "power2.in" }, 16.95);
+        exitScene("#s4", 16.9);
+
+        // scene 5
+        typeIn("#s5", 17.4);
+        linesIn("#s5", 17.6);
+        tl.fromTo("#s5 .cta", { y: 80, opacity: 0, scale: 0.9 }, { y: 0, opacity: 1, scale: 1, duration: 0.7, ease: "back.out(1.6)" }, 17.95);
+        tl.fromTo("#s5 .cursor", { x: 380, y: 520, opacity: 0, rotation: 12 }, { x: 0, y: 0, opacity: 1, rotation: 0, duration: 0.6, ease: "power3.out" }, 18.15);
+        tl.to("#s5 .cursor", { scale: 0.82, duration: 0.08, ease: "power2.in", transformOrigin: "10% 5%" }, 18.72);
+        tl.to("#s5 .cursor", { scale: 1, duration: 0.25, ease: "back.out(3)" }, 18.8);
+        tl.to("#s5 .cta", { scale: 0.95, duration: 0.08, ease: "power2.in" }, 18.72);
+        tl.to("#s5 .cta", { scale: 1, duration: 0.45, ease: "elastic.out(1, 0.45)" }, 18.8);
+        tl.fromTo("#s5 .ripple", { scale: 0, opacity: 0.8 }, { scale: 4.5, opacity: 0, duration: 0.7, ease: "power2.out" }, 18.74);
+        fadeUp("#s5 .note", 18.95);
+        tl.fromTo("#route .label.r", { scale: 1 }, { scale: 1.2, duration: 0.25, ease: "power2.out", yoyo: true, repeat: 1, transformOrigin: "100% 50%" }, 18.8);
+
+        window.__timelines["main"] = tl;
+      })();
+    </script>
+  </body>
+</html>

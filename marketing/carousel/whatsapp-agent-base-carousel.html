@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Agent Base — Carrusel</title>
+<!--
+  Carrusel 1080×1350 (4:5) — estilo "warm editorial" Formosa.dev.
+  Preview: abrir el archivo en el navegador (flechas ◀ ▶ para navegar).
+  Export: ?export&slide=N muestra solo el slide N a 504×630 CSS px
+          (el script export-pngs.mjs lo captura a 1080×1350 PNG).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0F172A;
+    --rosa:#FF2B8A;
+    --amarillo:#FFC31A;
+    --crema:#FFF8F5;
+    --lavanda:#D9A7F5;
+    --durazno:#FFD6C1;
+    --green:#25D366;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:#0d1117;font-family:'Manrope',system-ui,sans-serif}
+  body.preview{display:flex;align-items:center;justify-content:center;min-height:100vh;gap:24px}
+  body.export{background:#0d1117}
+
+  /* ─── Slide canvas: 504×630 CSS px → 1080×1350 PNG ─── */
+  .slide{
+    position:relative;width:504px;height:630px;overflow:hidden;
+    display:none;flex-direction:column;
+    border-radius:18px;
+    box-shadow:0 30px 80px rgba(0,0,0,.5);
+  }
+  body.export .slide{border-radius:0;box-shadow:none}
+  .slide.active{display:flex}
+
+  /* ─── Pencil-hatch texture (SVG inline, diferente por slide) ─── */
+  .hatch{position:absolute;pointer-events:none;opacity:.14}
+
+  /* ─── Layout atoms ─── */
+  .pad{position:relative;flex:1;display:flex;flex-direction:column;padding:44px 42px 34px}
+  .logo{position:absolute;top:30px;right:30px;display:flex;align-items:center;gap:8px}
+  .logo svg{width:34px;height:34px}
+  .logo span{font-weight:800;font-size:13px;letter-spacing:.04em}
+  .kicker{font-size:12px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px}
+  h1{font-weight:800;line-height:.98;letter-spacing:-.02em}
+  .xl{font-size:64px}
+  .lg{font-size:52px}
+  .md{font-size:38px}
+  .sub{margin-top:16px;font-size:17px;font-weight:600;line-height:1.45;max-width:400px}
+  .accent-rosa{color:var(--rosa)}
+  .accent-ink{color:var(--ink)}
+  .accent-green{color:var(--green)}
+  .accent-amarillo{color:var(--amarillo)}
+  .footer{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:20px}
+  .footer .dot{width:8px;height:8px;border-radius:50%}
+  .footer p{font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .chip{font-size:13.5px;font-weight:800;padding:9px 16px;border-radius:999px;border:2px solid currentColor}
+  .big-num{font-size:150px;font-weight:800;line-height:.9;letter-spacing:-.04em}
+  .row{display:flex;gap:14px;margin-top:22px}
+  .pill-card{flex:1;border-radius:16px;padding:16px 14px;border:2px solid}
+  .pill-card b{display:block;font-size:14px;margin-bottom:6px}
+  .pill-card span{font-size:12px;font-weight:600;line-height:1.4;display:block}
+  .mono{font-family:'Cascadia Code',Consolas,monospace}
+
+  /* ─── Slide palettes ─── */
+  .p-durazno{background:var(--durazno);color:var(--ink)}
+  .p-amarillo{background:var(--amarillo);color:var(--ink)}
+  .p-rosa{background:var(--rosa);color:var(--crema)}
+  .p-crema{background:var(--crema);color:var(--ink)}
+  .p-lavanda{background:var(--lavanda);color:var(--ink)}
+  .p-ink{background:var(--ink);color:var(--crema)}
+  .p-green{background:#0b3d24;color:var(--crema)}
+
+  .p-rosa .logo span{color:var(--crema)}
+  .p-ink .logo span,.p-green .logo span{color:var(--crema)}
+
+  /* list styles */
+  ul.tight{list-style:none;margin-top:20px}
+  ul.tight li{font-size:16.5px;font-weight:700;line-height:1.4;padding:9px 0 9px 34px;position:relative}
+  ul.tight li::before{content:"";position:absolute;left:0;top:12px;width:22px;height:10px;border-radius:6px;background:currentColor;opacity:.35}
+
+  /* phone mock (slide 2) */
+  .phone{position:absolute;right:-46px;bottom:-30px;width:200px;height:390px;background:var(--ink);border-radius:28px;padding:14px;transform:rotate(8deg);box-shadow:0 24px 60px rgba(0,0,0,.35)}
+  .phone .screen{height:100%;border-radius:18px;background:#111b2e;display:flex;flex-direction:column;gap:8px;padding:14px 10px;overflow:hidden}
+  .msg{border-radius:10px;padding:8px 10px;font-size:10px;font-weight:700;line-height:1.3;max-width:82%}
+  .msg.in{background:#1f2c45;color:#c9d6ee;align-self:flex-start}
+  .msg.out{background:var(--green);color:#062b15;align-self:flex-end}
+
+  /* tenant boxes (slide 3) */
+  .tenants{display:flex;gap:12px;margin-top:26px}
+  .tenant{flex:1;background:rgba(15,23,42,.08);border:2.5px solid var(--ink);border-radius:14px;padding:14px 12px}
+  .tenant .tname{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .tenant .tlock{margin-top:10px;height:26px;border-radius:7px;background:var(--ink);color:var(--amarillo);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;letter-spacing:.06em}
+
+  /* pipeline (slide 6) */
+  .pipe{display:flex;flex-direction:column;gap:0;margin-top:24px}
+  .pstep{display:flex;align-items:center;gap:12px;font-size:15px;font-weight:800;padding:8px 0}
+  .pstep .n{flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--crema);color:var(--rosa);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+  .pstep .bar{flex:1;height:8px;border-radius:5px;background:rgba(255,248,245,.22)}
+  .pstep .bar i{display:block;height:100%;border-radius:5px;background:var(--amarillo)}
+
+  /* nav + export panel (preview only) */
+  .navbtn{position:fixed;top:50%;transform:translateY(-50%);background:#1c2230;border:1px solid rgba(255,255,255,.12);color:#dfe6f3;width:46px;height:46px;border-radius:50%;font-size:20px;cursor:pointer;z-index:10}
+  .navbtn:hover{background:#2a3245}
+  #prev{left:16px}#next{right:16px}
+  body.export .navbtn,body.export .download-panel{display:none}
+  .download-panel{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#161b28;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 18px;display:flex;align-items:center;gap:12px;z-index:10}
+  .download-panel p{font-size:11px;color:#8b93a8;font-weight:600}
+  .download-panel button{background:var(--rosa);border:none;color:#fff;font-family:inherit;font-weight:800;font-size:12px;padding:9px 16px;border-radius:8px;cursor:pointer}
+  .download-panel button.alt{background:#2a3245}
+  .counter{position:fixed;top:18px;left:50%;transform:translateX(-50%);color:#8b93a8;font-size:12px;font-weight:700;letter-spacing:.15em;z-index:10}
+  body.export .counter{display:none}
+</style>
+</head>
+<body class="preview">
+
+<div class="counter" id="counter">1 / 7</div>
+<button class="navbtn" id="prev" onclick="go(-1)">‹</button>
+<button class="navbtn" id="next" onclick="go(1)">›</button>
+
+<!-- SLIDE 1 — portada (durazno) -->
+<section class="slide p-durazno" id="s1">
+  <svg class="hatch" style="left:-20px;bottom:-10px" width="300" height="300" viewBox="0 0 300 300">
+    <g stroke="#0F172A" stroke-width="2" stroke-linecap="round">
+      <line x1="10" y1="290" x2="90" y2="210"/><line x1="30" y1="295" x2="120" y2="205"/><line x1="55" y1="298" x2="150" y2="203"/><line x1="85" y1="300" x2="185" y2="200"/><line x1="120" y1="300" x2="220" y2="200"/><line x1="160" y1="300" x2="255" y2="205"/><line x1="200" y1="300" x2="290" y2="210"/>
+    </g>
+  </svg>
+  <svg class="hatch" style="right:-30px;top:120px" width="260" height="260" viewBox="0 0 260 260">
+    <g stroke="#0F172A" stroke-width="2" stroke-linecap="round">
+      <line x1="250" y1="10" x2="170" y2="90"/><line x1="255" y1="40" x2="140" y2="155"/><line x1="258" y1="75" x2="105" y2="228"/><line x1="258" y1="110" x2="75" y2="258"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#0F172A"/><path d="M18 36l-2 8 10-8" fill="#0F172A"/><path d="M14 18h20M14 24h13" stroke="#FFD6C1" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">open source · multi-tenant</div>
+    <h1 class="xl">WHATSAPP<br>AGENT<br><span class="accent-rosa">BASE</span></h1>
+    <p class="sub">La base para construir tu propio SaaS de WhatsApp Business. Vos escribís el producto — el plumbing ya está.</p>
+    <div class="chips">
+      <span class="chip">YCloud</span><span class="chip">Meta API</span><span class="chip">Chatwoot</span><span class="chip">IA agnóstica</span>
+    </div>
+    <div class="footer"><span class="dot" style="background:var(--rosa)"></span><p>github.com/adriangmrraa/whatsapp-agent-base</p></div>
+  </div>
+</section>
+
+<!-- SLIDE 2 — problema/solución (rosa) -->
+<section class="slide p-rosa" id="s2">
+  <svg class="hatch" style="left:-24px;top:-16px" width="280" height="220" viewBox="0 0 280 220">
+    <g stroke="#FFF8F5" stroke-width="2" stroke-linecap="round">
+      <line x1="10" y1="10" x2="95" y2="95"/><line x1="10" y1="40" x2="125" y2="155"/><line x1="10" y1="75" x2="150" y2="215"/><line x1="40" y1="10" x2="190" y2="160"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#FFF8F5"/><path d="M18 36l-2 8 10-8" fill="#FFF8F5"/><path d="M14 18h20M14 24h13" stroke="#FF2B8A" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">el problema</div>
+    <h1 class="lg">Construir un SaaS de WhatsApp es<br><span class="accent-amarillo">meses</span> de plumbing.</h1>
+    <p class="sub" style="max-width:330px">Webhooks, firmas, tenants, dedup, sesiones, buffers, credenciales… antes de escribir UNA regla de negocio.</p>
+    <div class="phone">
+      <div class="screen">
+        <div class="msg in">Hola, ¿hay stock?</div>
+        <div class="msg out">Sí. ¿Delivery o retiro?</div>
+        <div class="msg in">Delivery, porfa</div>
+        <div class="msg out">Pedido #1042 listo.</div>
+        <div class="msg in" style="opacity:.5">IA · tenant: pizzeria</div>
+      </div>
+    </div>
+    <div class="footer"><span class="dot" style="background:var(--amarillo)"></span><p>la base lo resuelve</p></div>
+  </div>
+</section>
+
+<!-- SLIDE 3 — multi-tenant (amarillo) -->
+<section class="slide p-amarillo" id="s3">
+  <svg class="hatch" style="right:-20px;bottom:-24px" width="280" height="280" viewBox="0 0 280 280">
+    <g stroke="#0F172A" stroke-width="2" stroke-linecap="round">
+      <line x1="270" y1="20" x2="180" y2="110"/><line x1="275" y1="55" x2="155" y2="175"/><line x1="278" y1="95" x2="130" y2="243"/><line x1="278" y1="140" x2="105" y2="278"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#0F172A"/><path d="M18 36l-2 8 10-8" fill="#0F172A"/><path d="M14 18h20M14 24h13" stroke="#FFC31A" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">arquitectura</div>
+    <h1 class="lg"><span class="accent-rosa">Multi-tenant</span><br>desde el día 1.</h1>
+    <p class="sub">Cada cliente, su propio mundo. <code class="mono">tenant_id</code> en cada fila, credenciales cifradas AES-256 por tenant, tools del agente creadas por tenant.</p>
+    <div class="tenants">
+      <div class="tenant"><div class="tname">Pizzería</div><div class="tlock">TENANT 1</div></div>
+      <div class="tenant"><div class="tname">Clínica</div><div class="tlock">TENANT 2</div></div>
+      <div class="tenant"><div class="tname">Tienda</div><div class="tlock">TENANT N</div></div>
+    </div>
+    <ul class="tight">
+      <li>Aislamiento = frontera de seguridad, no un filtro más</li>
+      <li>Uniques re-keyed a scope de tenant</li>
+      <li>Secretos por tenant, nunca globales</li>
+    </ul>
+    <div class="footer"><span class="dot" style="background:var(--rosa)"></span><p>docs/multi-tenancy.md</p></div>
+  </div>
+</section>
+
+<!-- SLIDE 4 — providers (ink) -->
+<section class="slide p-ink" id="s4">
+  <svg class="hatch" style="left:-30px;bottom:-20px" width="300" height="280" viewBox="0 0 300 280">
+    <g stroke="#FFC31A" stroke-width="2" stroke-linecap="round">
+      <line x1="10" y1="270" x2="100" y2="180"/><line x1="10" y1="235" x2="135" y2="110"/><line x1="10" y1="195" x2="170" y2="35"/><line x1="45" y1="278" x2="200" y2="123"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#FFF8F5"/><path d="M18 36l-2 8 10-8" fill="#FFF8F5"/><path d="M14 18h20M14 24h13" stroke="#0F172A" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">providers</div>
+    <h1 class="lg">Una interfaz.<br><span class="accent-green">Todos</span> los canales.</h1>
+    <p class="sub">El motor no conoce SDKs — habla <code class="mono">MessagingProvider</code>. Cambiá de proveedor sin tocar el negocio.</p>
+    <div class="row" style="flex-direction:column;gap:12px">
+      <div class="pill-card" style="border-color:var(--green)"><b style="color:var(--green)">YCloud</b><span>webhook HMAC · BSP</span></div>
+      <div class="pill-card" style="border-color:var(--lavanda)"><b style="color:var(--lavanda)">Meta Cloud API</b><span>OAuth directo, sin BSP</span></div>
+      <div class="pill-card" style="border-color:var(--amarillo)"><b style="color:var(--amarillo)">Chatwoot</b><span>inbox humano + bridge</span></div>
+    </div>
+    <div class="footer"><span class="dot" style="background:var(--green)"></span><p>+ telegram · el tuyo en ~150 líneas</p></div>
+  </div>
+</section>
+
+<!-- SLIDE 5 — AI engine (crema) -->
+<section class="slide p-crema" id="s5">
+  <svg class="hatch" style="right:-24px;top:-18px" width="270" height="240" viewBox="0 0 270 240">
+    <g stroke="#0F172A" stroke-width="2" stroke-linecap="round">
+      <line x1="260" y1="10" x2="170" y2="100"/><line x1="265" y1="45" x2="140" y2="170"/><line x1="268" y1="85" x2="115" y2="238"/><line x1="230" y1="10" x2="60" y2="180"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#0F172A"/><path d="M18 36l-2 8 10-8" fill="#0F172A"/><path d="M14 18h20M14 24h13" stroke="#FFF8F5" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">ai engine</div>
+    <h1 class="md">Cualquier modelo,<br><span class="accent-rosa">por tenant.</span></h1>
+    <p class="sub">OpenAI-compatible: OpenAI, OpenRouter, DeepSeek, Groq, Ollama. Config por tenant en <code class="mono">agent_config.ai_*</code>.</p>
+    <ul class="tight">
+      <li><b>Session policy</b> — máquina de estados durable (CAS) que decide ANTES de gastar tokens</li>
+      <li><b>Tools por tenant</b> — <code class="mono">buildAgentTools(tenantId)</code>: catálogo, órdenes, direcciones, handoff</li>
+      <li><b>Buffer + dedup</b> — mensajes rápidos se coalescen; replays no duplican respuestas</li>
+      <li><b>Handoff humano</b> — claims idempotentes, override 24 h, bridge a Chatwoot</li>
+    </ul>
+    <div class="footer"><span class="dot" style="background:var(--rosa)"></span><p>docs/ai-engine.md</p></div>
+  </div>
+</section>
+
+<!-- SLIDE 6 — seguridad (rosa) -->
+<section class="slide p-rosa" id="s6">
+  <svg class="hatch" style="left:-22px;bottom:-14px" width="280" height="240" viewBox="0 0 280 240">
+    <g stroke="#FFF8F5" stroke-width="2" stroke-linecap="round">
+      <line x1="10" y1="230" x2="100" y2="140"/><line x1="10" y1="195" x2="135" y2="70"/><line x1="10" y1="160" x2="170" y2="10"/><line x1="40" y1="238" x2="170" y2="108"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#FFF8F5"/><path d="M18 36l-2 8 10-8" fill="#FFF8F5"/><path d="M14 18h20M14 24h13" stroke="#FF2B8A" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">seguridad</div>
+    <h1 class="md">Fail closed.<br>Siempre.</h1>
+    <div class="pipe">
+      <div class="pstep"><span class="n">1</span><span>firma HMAC por tenant</span><span class="bar"><i style="width:100%"></i></span></div>
+      <div class="pstep"><span class="n">2</span><span>dedup por platform id</span><span class="bar"><i style="width:100%"></i></span></div>
+      <div class="pstep"><span class="n">3</span><span>CAS en la sesión</span><span class="bar"><i style="width:100%"></i></span></div>
+      <div class="pstep"><span class="n">4</span><span>efectos idempotentes</span><span class="bar"><i style="width:100%"></i></span></div>
+      <div class="pstep"><span class="n">5</span><span>rate limit + DLQ</span><span class="bar"><i style="width:100%"></i></span></div>
+    </div>
+    <p class="sub" style="margin-top:24px">Si la firma, la dedup o el CAS dudan → <b>no hay respuesta</b>. Perder una reply se recupera; mandar dos, no.</p>
+    <div class="footer"><span class="dot" style="background:var(--amarillo)"></span><p>docs/security.md</p></div>
+  </div>
+</section>
+
+<!-- SLIDE 7 — CTA (ink) -->
+<section class="slide p-ink" id="s7">
+  <svg class="hatch" style="right:-26px;bottom:-20px" width="280" height="260" viewBox="0 0 280 260">
+    <g stroke="#FF2B8A" stroke-width="2" stroke-linecap="round">
+      <line x1="270" y1="250" x2="170" y2="150"/><line x1="275" y1="210" x2="140" y2="75"/><line x1="278" y1="170" x2="110" y2="10"/><line x1="278" y1="250" x2="60" y2="30"/>
+    </g>
+  </svg>
+  <div class="logo"><svg viewBox="0 0 48 48" fill="none"><rect x="4" y="6" width="40" height="30" rx="9" fill="#FFF8F5"/><path d="M18 36l-2 8 10-8" fill="#FFF8F5"/><path d="M14 18h20M14 24h13" stroke="#0F172A" stroke-width="3" stroke-linecap="round"/></svg><span>WA AGENT BASE</span></div>
+  <div class="pad">
+    <div class="kicker">empezá hoy</div>
+    <h1 class="lg">Cloná.<br>Extendé.<br><span class="accent-green">Construí.</span></h1>
+    <pre style="margin-top:26px;background:rgba(255,248,245,.08);border:1.5px solid rgba(255,248,245,.25);border-radius:12px;padding:16px;font-family:'Cascadia Code',Consolas,monospace;font-size:12.5px;line-height:1.7;color:#FFF8F5">git clone adriangmrraa/
+  whatsapp-agent-base
+npm install
+cp .env.example .env.local
+npm run db:migrate && npm run db:seed
+npm run dev</pre>
+    <div class="footer"><span class="dot" style="background:var(--green)"></span><p>github.com/adriangmrraa/whatsapp-agent-base</p></div>
+  </div>
+</section>
+
+<div class="download-panel">
+  <p>EXPORTAR PNG · 1080×1350</p>
+  <button onclick="downloadCurrent()">Descargar slide</button>
+  <button class="alt" onclick="downloadAll()">Descargar las 7</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zumer/snapdom@2.24.17/dist/snapdom.js"></script>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const total=slides.length;
+  const counter=document.getElementById('counter');
+  let current=0;
+  const IG_W=1080,SLIDE_W=504,SLIDE_H=630,SCALE=IG_W/SLIDE_W;
+  const FILE_PREFIX='whatsapp-agent-base-slide-';
+
+  function show(i){
+    current=Math.max(0,Math.min(total-1,i));
+    slides.forEach((s,idx)=>s.classList.toggle('active',idx===current));
+    counter.textContent=(current+1)+' / '+total;
+  }
+  function go(d){show(current+d)}
+  show(0);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight')go(1);
+    if(e.key==='ArrowLeft')go(-1);
+  });
+
+  // export mode: ?export&slide=N → single slide, no chrome
+  (function exportMode(){
+    const params=new URLSearchParams(location.search);
+    if(!params.has('export'))return;
+    document.body.classList.remove('preview');
+    document.body.classList.add('export');
+    const i=Math.max(0,Math.min(total-1,parseInt(params.get('slide')||'0',10)));
+    show(i);
+  })();
+
+  const fontsReady=document.fonts.ready;
+
+  async function captureSlide(index){
+    const wrap=document.createElement('div');
+    Object.assign(wrap.style,{position:'fixed',top:'0',left:'-10000px',width:SLIDE_W+'px',height:SLIDE_H+'px',overflow:'hidden',background:'#0d1117'});
+    const clone=slides[index].cloneNode(true);
+    clone.classList.add('active');
+    Object.assign(clone.style,{position:'absolute',inset:'0',width:'100%',height:'100%',opacity:'1',transform:'none',transition:'none'});
+    clone.querySelectorAll('*').forEach(el=>{el.style.transition='none';el.style.animation='none'});
+    wrap.appendChild(clone);
+    document.body.appendChild(wrap);
+    await Promise.all([...wrap.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=img.onerror=r})));
+    await fontsReady;await document.fonts.ready;
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    try{
+      return await snapdom.toBlob(wrap,{type:'png',scale:SCALE,dpr:1,embedFonts:true});
+    }finally{wrap.remove()}
+  }
+
+  function saveBlob(blob,name){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download=name;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }
+
+  async function downloadCurrent(){
+    const blob=await captureSlide(current);
+    saveBlob(blob,FILE_PREFIX+String(current+1).padStart(2,'0')+'.png');
+  }
+
+  async function downloadAll(){
+    for(let i=0;i<total;i++){
+      const blob=await captureSlide(i);
+      saveBlob(blob,FILE_PREFIX+String(i+1).padStart(2,'0')+'.png');
+      await new Promise(r=>setTimeout(r,400));
+    }
+  }
+</script>
+</body>
+</html>

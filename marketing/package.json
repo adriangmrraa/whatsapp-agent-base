@@ -1,0 +1,16 @@
+{
+  "name": "wab-marketing",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Code-generated marketing assets for whatsapp-agent-base (carousels, videos). Not shipped with the app.",
+  "type": "module",
+  "scripts": {
+    "export:carousel": "node carousel/export-pngs.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0"
+  },
+  "dependencies": {
+    "whatsapp-business-base": "file:.."
+  }
+}
