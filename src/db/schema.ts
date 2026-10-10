@@ -13,6 +13,7 @@ import {
   index,
   vector,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
@@ -803,14 +804,16 @@ export const knowledgeChunks = pgTable(
 // the dev-harness Engram store — Engram is project-scoped and local; this
 // table is the tenant-scoped product fallback. Every query filters BOTH
 // `tenant_id` and `project` (isolation law + harness namespace).
+//
+// `tenant_id` is NULLABLE: the product always sets it (isolation law), while
+// the dev harness runs with no tenant → NULL is the harness/global scope, and
+// queries filter `tenant_id IS NULL` (never an unscoped query).
 
 export const jenMemory = pgTable(
   "jen_memory",
   {
     id: serial("id").primaryKey(),
-    tenantId: integer("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
+    tenantId: integer("tenant_id").references(() => tenants.id),
     project: varchar("project", { length: 255 }).notNull(),
     topicKey: varchar("topic_key", { length: 255 }),
     type: varchar("type", { length: 50 }).notNull(),
@@ -826,5 +829,8 @@ export const jenMemory = pgTable(
   (table) => ({
     projectIdx: index("idx_jen_memory_project").on(table.project),
     tenantIdx: index("idx_jen_memory_tenant").on(table.tenantId),
+    harnessScopeIdx: index("idx_jen_memory_harness_scope")
+      .on(table.project)
+      .where(sql`tenant_id is null`),
   }),
 );
