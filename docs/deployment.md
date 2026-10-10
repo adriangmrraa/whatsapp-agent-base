@@ -2,10 +2,76 @@
 
 ## Requirements
 
-- Node.js 20+, PostgreSQL 14+ (Neon/Supabase/RDS/local).
+- Node.js 20+, PostgreSQL 14+ with the **pgvector** extension (Neon supports it
+  natively; also Supabase/RDS/local with the extension installed).
 - Upstash Redis — optional but recommended in production (buffer + rate limit
   across instances).
 - Public HTTPS URL for provider webhooks (`BASE_URL`).
+
+## Deploy targets
+
+The same image/code runs in three places; only env and the DB URL differ.
+
+### Local (dev + internal voice agent)
+
+```bash
+cp .env.example .env.local
+npm run db:migrate && npm run db:seed
+npm run dev
+```
+
+Recommended `DATABASE_URL`: a Neon branch (below) — pgvector is available with
+no local install.
+
+### VPS
+
+- `npm ci && npm run build && npm start` behind a reverse proxy (Caddy/Nginx)
+  that terminates TLS and forwards to `:3000`.
+- Run migrations on deploy (`npm run db:migrate`) before starting.
+- Set `UPSTASH_REDIS_REST_URL`/`_TOKEN` so the buffer is shared across
+  processes, and schedule `POST /api/cron/flush` every minute.
+
+### Render (Blueprint)
+
+`render.yaml` (Blueprint spec — `fromDatabase` wires the connection string,
+`generateValue` makes secrets, `sync: false` prompts for real secrets,
+`healthCheckPath` uses the existing `/api/health`):
+
+```yaml
+services:
+  - type: web
+    runtime: node
+    name: whatsapp-agent-base
+    buildCommand: npm ci && npm run db:migrate && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: whatsapp-agent-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: BASE_URL
+        sync: false
+```
+
+> A Render-managed Postgres works for a first deploy, but the **default
+> database in onboarding is Neon** (serverless-friendly, pgvector ready, cheap
+> branching). Set `DATABASE_URL` to the Neon connection string instead of
+> `fromDatabase` if you prefer Neon.
+
+### Neon (default)
+
+1. Create a project/branch at neon.tech; copy the pooled connection string into
+   `DATABASE_URL`.
+2. pgvector is available — `drizzle/0002_knowledge_chunks.sql` runs
+   `CREATE EXTENSION IF NOT EXISTS vector;`.
+3. For serverless, keep the pooled URL (the app uses `@neondatabase/serverless`).
 
 ## Setup
 
@@ -59,7 +125,9 @@ Point your uptime monitor here.
 See `.env.example` — every variable is documented inline. Minimum viable set
 for production: `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY`,
 `DEFAULT_TENANT_SLUG`, one provider's credentials, `OPENAI_API_KEY` or
-`AI_BASE_URL`/`AI_MODEL` + key, `CRON_SECRET`, `BASE_URL`.
+`AI_BASE_URL`/`AI_MODEL` + key, `CRON_SECRET`, `BASE_URL`. For vector memory add
+`EMBEDDING_MODEL` (+ `EMBEDDING_API_KEY`/`EMBEDDING_BASE_URL` if not OpenAI);
+the database needs the pgvector extension (migration `0002`).
 
 ## Production checklist
 

@@ -30,6 +30,29 @@ commerce surface:
 To add domain tools (booking, stock, kitchen queues), add them inside
 `buildAgentTools` — keep the tenant scope on every `where`.
 
+## Vector memory (retrieval before generateText)
+
+`src/lib/embeddings/` (see [`docs/embeddings.md`](embeddings.md)).
+
+Before every `generateText`, `processMessage` calls
+`retrieveKnowledge({ tenantId, query })` and appends the top-k chunks to the
+system prompt (`## Conocimiento relevante del negocio`). A tenant-scoped
+`searchKnowledge` tool also lets the model query the knowledge base on demand.
+Retrieval is **best-effort** — an embedding failure logs and continues with no
+context (a reply without memory beats no reply).
+
+## System One (deterministic decisions — Jev / Laya)
+
+`src/lib/system-one/` (see [`docs/agent-platform.md`](agent-platform.md)).
+
+Before the LLM, `decideForTurn()` consults the deterministic decision layer
+(default provider **Jev**, local rules; **Laya** swappable). It returns a
+`choice | score | gate | abstain` decision with an auditable, non-model reason.
+A `gate` that disallows the turn suppresses the toolset (the model still
+answers, without acting); the customer handoff path remains owned upstream by
+the session policy. `decideForTurn` never throws — a decision-layer outage
+degrades to `abstain` (allow).
+
 ## Session policy (the anti-LLM firewall)
 
 `src/lib/whatsapp/session-policy.ts` + `session-store.ts`.

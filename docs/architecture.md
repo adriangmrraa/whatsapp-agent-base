@@ -33,6 +33,11 @@ the AI provider, swap the channel — the engine stays.
 │  buildAgentTools(tenantId, phone) — every query scoped     │
 │  ai/config.ts — per-tenant OpenAI-compatible provider      │
 ├────────────────────────────────────────────────────────────┤
+│  Memory & agency                   src/lib/embeddings/     │
+│  knowledge_chunks (pgvector): retrieve top-k before gen    │
+│  capabilities/ registry · system-one/ (Jev) · voice/       │
+│  — the seams the internal agent and voice reuse            │
+├────────────────────────────────────────────────────────────┤
 │  Infra                             src/lib/                │
 │  buffer/ (Redis + fallback)  queue/ (outbound + DLQ)       │
 │  infra/circuit-breaker  idempotency  credentials (AES-256) │
@@ -43,6 +48,7 @@ the AI provider, swap the channel — the engine stays.
 │  tenants · channels · credentials · users · conversations  │
 │  chat_messages · session states/events/claims · leads ·    │
 │  agent_config · products · orders · addresses · promotions │
+│  knowledge_chunks (pgvector)                               │
 └────────────────────────────────────────────────────────────┘
 ```
 
