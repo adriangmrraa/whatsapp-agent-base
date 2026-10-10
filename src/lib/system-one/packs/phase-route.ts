@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   choiceOf,
@@ -19,13 +20,13 @@ import {
 // suggests the next hop. On no signal we route to "none" and do not advance.
 
 export const PHASE_ROUTE_PACK_ID = "phase-route";
-export const PHASE_ROUTE_POSTURE = "open" as const;
+export const PHASE_ROUTE_POSTURE = postureOf(PHASE_ROUTE_PACK_ID);
 
 export const PHASE_ROUTE_THRESHOLDS = {
   /** At/above this `noul` the current phase is complete enough to advance. */
-  readyMin: 0.6,
+  readyMin: noulThreshold(PHASE_ROUTE_PACK_ID, "ready"),
   /** At/above this `noul` the current phase is blocked on missing input. */
-  blockedMin: 0.5,
+  blockedMin: noulThreshold(PHASE_ROUTE_PACK_ID, "blocked"),
 } as const;
 
 /** Fallback option for the next-phase `choice`. */

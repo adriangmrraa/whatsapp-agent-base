@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf, scoreThreshold } from "../policy";
 import {
   askPack,
   noulOf,
@@ -19,13 +20,13 @@ import {
 // merge by itself. On no signal we report no scores and no blocking issue.
 
 export const REVIEW_PACK_ID = "review";
-export const REVIEW_POSTURE = "open" as const;
+export const REVIEW_POSTURE = postureOf(REVIEW_PACK_ID);
 
 export const REVIEW_THRESHOLDS = {
   /** Score index (0-based) at/below which a dimension is flagged weak. */
-  weakScore: 2,
+  weakScore: scoreThreshold(REVIEW_PACK_ID, "weakScore"),
   /** At/above this `noul` a blocking correctness issue exists. */
-  blockingMin: 0.5,
+  blockingMin: noulThreshold(REVIEW_PACK_ID, "blocking"),
 } as const;
 
 export const REVIEW_CRITERIA: readonly string[] = [

@@ -7,6 +7,7 @@ import type {
 } from "../provider/types";
 import { isNoAnswer } from "../provider/types";
 import type { ContextPrimer, PrimerCandidate } from "../context/primer";
+import type { FailPosture } from "../policy";
 
 // ─── Pack framework — one decision recipe per file ───────────────────────────
 //
@@ -27,7 +28,9 @@ import type { ContextPrimer, PrimerCandidate } from "../context/primer";
 // The pack functions are pure: no globals, no env reads, no network. The only
 // inputs are the `PackInput` and the injected `PackRuntime`.
 
-export type FailPosture = "open" | "closed";
+// Fail posture is owned by the policy module (single source of truth); packs
+// import it from here as before.
+export type { FailPosture } from "../policy";
 
 export interface PackCandidate {
   /** Stable id (file path, memory id, skill name, scenario id, test path, ...). */
@@ -46,6 +49,25 @@ export interface PackInput {
   queries?: string[];
   budgetTokens?: number;
   project?: string;
+  /**
+   * Calibration/test-only escape hatch: override individual policy thresholds
+   * by their pack key. Absent in production, so the policy values stand. Used
+   * by the golden eval to sweep a threshold without forking pack logic.
+   */
+  thresholdOverrides?: Readonly<Record<string, number>>;
+}
+
+/**
+ * Resolve a pack threshold: an explicit calibration override wins, otherwise
+ * the policy value. Keeps the "policy is the source of truth" default while
+ * letting the eval vary one threshold at a time.
+ */
+export function resolveThreshold(
+  input: PackInput,
+  key: string,
+  fallback: number,
+): number {
+  return input.thresholdOverrides?.[key] ?? fallback;
 }
 
 /** The two collaborators every pack consumes. */

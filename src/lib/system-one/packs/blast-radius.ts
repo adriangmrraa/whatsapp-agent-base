@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf, scoreThreshold } from "../policy";
 import {
   askPack,
   noulOf,
@@ -19,15 +20,15 @@ import {
 // block. On no signal we report no risk and no flags.
 
 export const BLAST_RADIUS_PACK_ID = "blast-radius";
-export const BLAST_RADIUS_POSTURE = "open" as const;
+export const BLAST_RADIUS_POSTURE = postureOf(BLAST_RADIUS_PACK_ID);
 
 export const BLAST_RADIUS_THRESHOLDS = {
   /** Score index (0-based) at/above which the radius is flagged. */
-  radiusWarn: 2,
+  radiusWarn: scoreThreshold(BLAST_RADIUS_PACK_ID, "radiusWarn"),
   /** At/above this `noul` many dependent modules are affected. */
-  dependentsMin: 0.5,
+  dependentsMin: noulThreshold(BLAST_RADIUS_PACK_ID, "dependents"),
   /** At/above this `noul` a public/shared API or contract changes. */
-  publicApiMin: 0.5,
+  publicApiMin: noulThreshold(BLAST_RADIUS_PACK_ID, "publicApi"),
 } as const;
 
 export const BLAST_RADIUS_CRITERIA: readonly string[] = [

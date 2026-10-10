@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   choiceOf,
@@ -19,13 +20,13 @@ import {
 // block the loop. On no signal we report "unknown" and proceed.
 
 export const TRIAGE_PACK_ID = "triage";
-export const TRIAGE_POSTURE = "open" as const;
+export const TRIAGE_POSTURE = postureOf(TRIAGE_PACK_ID);
 
 export const TRIAGE_THRESHOLDS = {
   /** At/above this `noul` the failure blocks the task. */
-  blockingMin: 0.5,
+  blockingMin: noulThreshold(TRIAGE_PACK_ID, "blocking"),
   /** At/above this `noul` a rerun is expected to pass (flake-like). */
-  rerunableMin: 0.5,
+  rerunableMin: noulThreshold(TRIAGE_PACK_ID, "rerunable"),
 } as const;
 
 /** Fallback option for the cause `choice` (always present in criteria). */

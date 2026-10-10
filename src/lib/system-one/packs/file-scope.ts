@@ -1,9 +1,11 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   choiceOf,
   describeCandidate,
   noulOf,
+  resolveThreshold,
   type PackCandidate,
   type PackDefinition,
   type PackInput,
@@ -22,13 +24,13 @@ import {
 // set incomplete so a human/inspector still sees the uncertainty.
 
 export const FILE_SCOPE_PACK_ID = "file-scope";
-export const FILE_SCOPE_POSTURE = "open" as const;
+export const FILE_SCOPE_POSTURE = postureOf(FILE_SCOPE_PACK_ID);
 
 export const FILE_SCOPE_THRESHOLDS = {
   /** Minimum `noul` for a candidate file to be considered in scope. */
-  fileMin: 0.4,
+  fileMin: noulThreshold(FILE_SCOPE_PACK_ID, "file"),
   /** Below this `covered` `noul` the candidate set under-covers the task. */
-  coveredMin: 0.5,
+  coveredMin: noulThreshold(FILE_SCOPE_PACK_ID, "covered"),
 } as const;
 
 /** Fallback option for the folder `choice` (always present in criteria). */
@@ -88,6 +90,9 @@ export async function runFileScope(
   const questions = buildFileScopeQuestions(candidates);
   const asked = await askPack(runtime, FILE_SCOPE_PACK_ID, input, questions);
 
+  const fileMin = resolveThreshold(input, "fileMin", FILE_SCOPE_THRESHOLDS.fileMin);
+  const coveredMin = resolveThreshold(input, "coveredMin", FILE_SCOPE_THRESHOLDS.coveredMin);
+
   const files: string[] = [];
   candidates.forEach((candidate, index) => {
     const value = noulOf(asked.answers[`${FILE_PREFIX}${index}`]);
@@ -95,7 +100,7 @@ export async function runFileScope(
       files.push(candidate.id);
       return;
     }
-    if (value >= FILE_SCOPE_THRESHOLDS.fileMin) files.push(candidate.id);
+    if (value >= fileMin) files.push(candidate.id);
   });
 
   const folderChoice = choiceOf(asked.answers.folder);
@@ -107,7 +112,7 @@ export async function runFileScope(
   const covered = noulOf(asked.answers.covered);
   const incomplete = asked.degraded
     ? true
-    : covered !== undefined && covered < FILE_SCOPE_THRESHOLDS.coveredMin;
+    : covered !== undefined && covered < coveredMin;
 
   return {
     packId: FILE_SCOPE_PACK_ID,

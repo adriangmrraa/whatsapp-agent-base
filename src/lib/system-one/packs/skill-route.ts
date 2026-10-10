@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   choiceOf,
@@ -21,11 +22,11 @@ import {
 // block. On no signal we select nothing and route to "none".
 
 export const SKILL_ROUTE_PACK_ID = "skill-route";
-export const SKILL_ROUTE_POSTURE = "open" as const;
+export const SKILL_ROUTE_POSTURE = postureOf(SKILL_ROUTE_PACK_ID);
 
 export const SKILL_ROUTE_THRESHOLDS = {
   /** Minimum `noul` for a skill to be considered applicable. */
-  skillMin: 0.5,
+  skillMin: noulThreshold(SKILL_ROUTE_PACK_ID, "skill"),
 } as const;
 
 /** Fallback option for the primary-skill `choice`. */

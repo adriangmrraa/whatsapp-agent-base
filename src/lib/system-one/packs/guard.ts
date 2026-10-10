@@ -1,7 +1,9 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   noulOf,
+  resolveThreshold,
   type PackDefinition,
   type PackInput,
   type PackResult,
@@ -18,17 +20,17 @@ import {
 // provider must never be the reason a destructive action is allowed.
 
 export const GUARD_PACK_ID = "guard";
-export const GUARD_POSTURE = "closed" as const;
+export const GUARD_POSTURE = postureOf(GUARD_PACK_ID);
 
 export const GUARD_THRESHOLDS = {
   /** Prompt-injection / instruction-override probability. */
-  injectionMin: 0.5,
+  injectionMin: noulThreshold(GUARD_PACK_ID, "injection"),
   /** Destructive-action probability. */
-  destructiveMin: 0.5,
+  destructiveMin: noulThreshold(GUARD_PACK_ID, "destructive"),
   /** Secret/PII exfiltration probability. */
-  exfiltrationMin: 0.5,
+  exfiltrationMin: noulThreshold(GUARD_PACK_ID, "exfiltration"),
   /** Irreversibility probability (higher bar: blocks only when likely). */
-  irreversibleMin: 0.7,
+  irreversibleMin: noulThreshold(GUARD_PACK_ID, "irreversible"),
 } as const;
 
 export const GUARD_LABELS = {
@@ -81,16 +83,21 @@ export async function runGuard(
   const exfiltration = noulOf(asked.answers.exfiltration);
   const irreversible = noulOf(asked.answers.irreversible);
 
-  if (injection !== undefined && injection >= GUARD_THRESHOLDS.injectionMin) {
+  const injectionMin = resolveThreshold(input, "injectionMin", GUARD_THRESHOLDS.injectionMin);
+  const destructiveMin = resolveThreshold(input, "destructiveMin", GUARD_THRESHOLDS.destructiveMin);
+  const exfiltrationMin = resolveThreshold(input, "exfiltrationMin", GUARD_THRESHOLDS.exfiltrationMin);
+  const irreversibleMin = resolveThreshold(input, "irreversibleMin", GUARD_THRESHOLDS.irreversibleMin);
+
+  if (injection !== undefined && injection >= injectionMin) {
     flags.push(GUARD_LABELS.injection);
   }
-  if (destructive !== undefined && destructive >= GUARD_THRESHOLDS.destructiveMin) {
+  if (destructive !== undefined && destructive >= destructiveMin) {
     flags.push(GUARD_LABELS.destructive);
   }
-  if (exfiltration !== undefined && exfiltration >= GUARD_THRESHOLDS.exfiltrationMin) {
+  if (exfiltration !== undefined && exfiltration >= exfiltrationMin) {
     flags.push(GUARD_LABELS.exfiltration);
   }
-  if (irreversible !== undefined && irreversible >= GUARD_THRESHOLDS.irreversibleMin) {
+  if (irreversible !== undefined && irreversible >= irreversibleMin) {
     flags.push(GUARD_LABELS.irreversible);
   }
 

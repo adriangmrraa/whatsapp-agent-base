@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   describeCandidate,
@@ -20,13 +21,13 @@ import {
 // incomplete — conservative, but it never blocks (the gate does that).
 
 export const ACCEPTANCE_PACK_ID = "acceptance";
-export const ACCEPTANCE_POSTURE = "open" as const;
+export const ACCEPTANCE_POSTURE = postureOf(ACCEPTANCE_PACK_ID);
 
 export const ACCEPTANCE_THRESHOLDS = {
   /** Minimum `noul` for a scenario to count as covered by a passing test. */
-  scenarioMin: 0.5,
+  scenarioMin: noulThreshold(ACCEPTANCE_PACK_ID, "scenario"),
   /** Below this `noul` coverage is judged incomplete. */
-  completeMin: 0.5,
+  completeMin: noulThreshold(ACCEPTANCE_PACK_ID, "complete"),
 } as const;
 
 const COVER_PREFIX = "cover_";

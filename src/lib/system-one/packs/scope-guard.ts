@@ -1,4 +1,5 @@
 import type { QuestionPack } from "../provider/types";
+import { noulThreshold, postureOf } from "../policy";
 import {
   askPack,
   noulOf,
@@ -18,15 +19,15 @@ import {
 // the agreed scope is the most expensive failure mode; uncertainty blocks.
 
 export const SCOPE_GUARD_PACK_ID = "scope-guard";
-export const SCOPE_GUARD_POSTURE = "closed" as const;
+export const SCOPE_GUARD_POSTURE = postureOf(SCOPE_GUARD_PACK_ID);
 
 export const SCOPE_GUARD_THRESHOLDS = {
   /** Minimum `noul` for the diff to be considered in scope. */
-  inScopeMin: 0.5,
+  inScopeMin: noulThreshold(SCOPE_GUARD_PACK_ID, "inScope"),
   /** At/above this `noul` new (undesigned) paths are present. */
-  newPathsMin: 0.5,
+  newPathsMin: noulThreshold(SCOPE_GUARD_PACK_ID, "newPaths"),
   /** At/above this `noul` unrelated changes are present. */
-  unrelatedMin: 0.5,
+  unrelatedMin: noulThreshold(SCOPE_GUARD_PACK_ID, "unrelated"),
 } as const;
 
 export const SCOPE_GUARD_FLAGS = {
