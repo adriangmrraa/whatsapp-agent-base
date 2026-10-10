@@ -3,14 +3,9 @@ import {
   parseOAuthState,
   exchangeCodeForToken,
   getLongLivedToken,
-  discoverWabas,
-  subscribeWaba,
+  provisionMetaAssets,
 } from "@/lib/meta/oauth";
 import { setCredential } from "@/lib/credentials";
-import { ensureChannel, getAgentConfig } from "@/lib/tenants";
-import { db } from "@/db";
-import { agentConfig } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import logger from "@/lib/logger";
 
 // ─── Meta OAuth callback ─────────────────────────────────────────────────────
@@ -58,38 +53,9 @@ export async function GET(req: NextRequest) {
       value: new Date(Date.now() + long.expiresIn * 1000).toISOString(),
     });
 
-    // Discover WABA + phone numbers; register channels per phone number.
-    const assets = await discoverWabas(long.accessToken);
-    for (const asset of assets) {
-      await subscribeWaba({ wabaId: asset.wabaId, accessToken: long.accessToken });
-      await ensureChannel({
-        tenantId,
-        provider: "meta",
-        externalId: asset.phoneNumberId,
-        displayName: asset.verifiedName ?? asset.displayPhoneNumber,
-        config: {
-          wabaId: asset.wabaId,
-          wabaName: asset.wabaName,
-          displayPhoneNumber: asset.displayPhoneNumber,
-        },
-      });
-    }
-
-    // Mark config as connected.
-    const cfg = await getAgentConfig(tenantId);
-    const first = assets[0];
-    if (cfg) {
-      await db
-        .update(agentConfig)
-        .set({
-          metaConnected: true,
-          metaWabaId: first?.wabaId ?? null,
-          metaPhoneNumberId: first?.phoneNumberId ?? null,
-          metaBusinessName: first?.verifiedName ?? first?.wabaName ?? null,
-          updatedAt: new Date(),
-        })
-        .where(eq(agentConfig.tenantId, tenantId));
-    }
+    // Discover WABA + phone numbers; subscribe and register channels per phone
+    // (shared with the Embedded Signup flow).
+    await provisionMetaAssets({ tenantId, accessToken: long.accessToken });
 
     const res = NextResponse.redirect(`${base}/admin/agent?meta_connected=1`);
     res.cookies.set("meta_oauth_state", "", { maxAge: 0, path: "/" });
