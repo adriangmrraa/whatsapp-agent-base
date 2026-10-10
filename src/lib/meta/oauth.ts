@@ -1,6 +1,10 @@
 import { randomBytes } from "crypto";
+import { eq } from "drizzle-orm";
 import { encrypt } from "@/lib/encryption";
 import { getCredential } from "@/lib/credentials";
+import { db } from "@/db";
+import { agentConfig } from "@/db/schema";
+import { ensureChannel, getAgentConfig } from "@/lib/tenants";
 import { META_GRAPH_BASE, META_OAUTH_DIALOG, META_OAUTH_SCOPES } from "./config";
 
 // ─── Meta OAuth + WABA discovery (per tenant) ────────────────────────────────
@@ -48,7 +52,8 @@ export function parseOAuthState(state: string): { tenantId: number; nonce: strin
 export async function exchangeCodeForToken(input: {
   tenantId: number;
   code: string;
-  redirectUri: string;
+  /** Omitted for Embedded Signup, which exchanges the code without a redirect. */
+  redirectUri?: string;
 }): Promise<{ accessToken: string; expiresIn: number }> {
   const [appId, appSecret] = await Promise.all([
     getCredential({
@@ -72,8 +77,9 @@ export async function exchangeCodeForToken(input: {
     client_id: appId,
     client_secret: appSecret,
     code: input.code,
-    redirect_uri: input.redirectUri,
   });
+  if (input.redirectUri) params.set("redirect_uri", input.redirectUri);
+
   const resp = await fetch(`${META_GRAPH_BASE}/oauth/access_token?${params}`, {
     signal: AbortSignal.timeout(15_000),
   });
@@ -203,6 +209,76 @@ export async function unsubscribeWaba(input: {
     },
   );
   return resp.ok;
+}
+
+export interface ProvisionedMetaChannel {
+  phoneNumberId: string;
+  wabaId: string;
+  wabaName: string;
+  displayPhoneNumber: string;
+  displayName: string;
+}
+
+export interface ProvisionMetaResult {
+  assets: WabaAsset[];
+  channels: ProvisionedMetaChannel[];
+}
+
+/**
+ * Shared post-token provisioning for every Meta connect flow (OAuth callback
+ * and Embedded Signup). Given a valid access token it discovers the reachable
+ * WABAs + phone numbers, subscribes the app to each WABA, registers the
+ * tenant's `channels` rows, and marks the agent config connected. Idempotent:
+ * `ensureChannel` upserts by (provider, externalId).
+ *
+ * Never returns or logs the token.
+ */
+export async function provisionMetaAssets(input: {
+  tenantId: number;
+  accessToken: string;
+}): Promise<ProvisionMetaResult> {
+  const assets = await discoverWabas(input.accessToken);
+
+  for (const asset of assets) {
+    await subscribeWaba({ wabaId: asset.wabaId, accessToken: input.accessToken });
+    await ensureChannel({
+      tenantId: input.tenantId,
+      provider: "meta",
+      externalId: asset.phoneNumberId,
+      displayName: asset.verifiedName ?? asset.displayPhoneNumber,
+      config: {
+        wabaId: asset.wabaId,
+        wabaName: asset.wabaName,
+        displayPhoneNumber: asset.displayPhoneNumber,
+      },
+    });
+  }
+
+  const cfg = await getAgentConfig(input.tenantId);
+  const first = assets[0];
+  if (cfg) {
+    await db
+      .update(agentConfig)
+      .set({
+        metaConnected: true,
+        metaWabaId: first?.wabaId ?? null,
+        metaPhoneNumberId: first?.phoneNumberId ?? null,
+        metaBusinessName: first?.verifiedName ?? first?.wabaName ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentConfig.tenantId, input.tenantId));
+  }
+
+  return {
+    assets,
+    channels: assets.map((asset) => ({
+      phoneNumberId: asset.phoneNumberId,
+      wabaId: asset.wabaId,
+      wabaName: asset.wabaName,
+      displayPhoneNumber: asset.displayPhoneNumber,
+      displayName: asset.verifiedName ?? asset.displayPhoneNumber,
+    })),
+  };
 }
 
 export function encryptToken(token: string): string {

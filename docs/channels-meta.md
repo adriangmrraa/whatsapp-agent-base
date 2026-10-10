@@ -7,6 +7,9 @@ verify token. Remaining work is operational: register the `channels` rows, store
 the Page access token, and complete Meta App Review. Facts below are from the
 official Meta Graph API docs.
 
+> Embedded, one-click connect (no manual token copy) is documented separately in
+> [`meta-embedded-signup.md`](meta-embedded-signup.md).
+
 ## What Meta exposes
 
 - **Facebook Messenger** — messages to a Facebook **Page**.
