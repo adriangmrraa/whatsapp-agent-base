@@ -36,6 +36,13 @@
       "when": 1791700000000,
       "tag": "0004_storefront_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791700100000,
+      "tag": "0005_jen_memory",
+      "breakpoints": true
     }
   ]
 }

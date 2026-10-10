@@ -795,3 +795,36 @@ export const knowledgeChunks = pgTable(
     ),
   }),
 );
+
+// ─── JEV harness memory (tenant-scoped, portable fallback) ───────────────────
+//
+// The `neon` MemoryProvider backend (src/lib/system-one/context/memory/).
+// One row = one observation for a (tenant, project) namespace. This is NOT
+// the dev-harness Engram store — Engram is project-scoped and local; this
+// table is the tenant-scoped product fallback. Every query filters BOTH
+// `tenant_id` and `project` (isolation law + harness namespace).
+
+export const jenMemory = pgTable(
+  "jen_memory",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    project: varchar("project", { length: 255 }).notNull(),
+    topicKey: varchar("topic_key", { length: 255 }),
+    type: varchar("type", { length: 50 }).notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    projectIdx: index("idx_jen_memory_project").on(table.project),
+    tenantIdx: index("idx_jen_memory_tenant").on(table.tenantId),
+  }),
+);
