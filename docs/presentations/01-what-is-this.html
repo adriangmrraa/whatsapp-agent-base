@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Agent Base — What It Is</title>
+<style>
+  :root { --bg:#0a0a0f; --panel:#12121a; --line:rgba(255,255,255,.08); --txt:#e8e8ee; --dim:#9a9aad; --accent:#7c6cff; --accent2:#2dd4bf; --warn:#f59e0b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--txt); font-family:"Segoe UI",system-ui,sans-serif; }
+  .slide { min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:64px 24px; border-bottom:1px solid var(--line); }
+  .slide:last-child { border-bottom:none; }
+  .inner { max-width:960px; width:100%; }
+  .kicker { font-size:13px; letter-spacing:.25em; text-transform:uppercase; color:var(--accent2); margin-bottom:16px; }
+  h1 { font-size:clamp(38px,6vw,72px); font-weight:800; line-height:1.05; margin-bottom:24px; }
+  h2 { font-size:clamp(28px,4vw,44px); font-weight:700; margin-bottom:28px; }
+  h3 { font-size:18px; margin-bottom:10px; color:var(--accent); }
+  p, li { font-size:17px; line-height:1.65; color:var(--dim); }
+  .lead { font-size:21px; color:var(--txt); max-width:760px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:28px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .card p { font-size:14.5px; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--accent2); margin-bottom:12px; }
+  code, .mono { font-family:"Cascadia Code",Consolas,monospace; font-size:.9em; color:#c4b5fd; }
+  pre { background:#0d0d14; border:1px solid var(--line); border-radius:12px; padding:20px; overflow-x:auto; margin-top:20px; font-family:"Cascadia Code",Consolas,monospace; font-size:13.5px; line-height:1.6; color:#c8c8d4; }
+  pre .k { color:var(--accent2); } pre .c { color:#5a5a70; }
+  table { width:100%; border-collapse:collapse; margin-top:20px; font-size:14.5px; }
+  th { text-align:left; padding:10px 12px; color:var(--txt); border-bottom:1px solid var(--line); font-size:12px; letter-spacing:.1em; text-transform:uppercase; }
+  td { padding:10px 12px; border-bottom:1px solid var(--line); color:var(--dim); }
+  .flow { display:flex; flex-direction:column; gap:0; margin-top:24px; }
+  .fstep { display:flex; gap:16px; align-items:flex-start; }
+  .fnum { flex-shrink:0; width:30px; height:30px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; margin-top:2px; }
+  .fbody { padding-bottom:22px; border-left:2px solid var(--line); padding-left:22px; margin-left:15px; }
+  .fbody:last-child { border-left-color:transparent; }
+  .fbody b { display:block; font-size:16px; margin-bottom:4px; }
+  .fbody span { font-size:14px; color:var(--dim); }
+  .nav { position:fixed; bottom:18px; right:24px; display:flex; gap:8px; }
+  .nav a { color:var(--dim); text-decoration:none; font-size:12px; padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:rgba(18,18,26,.8); }
+  .nav a:hover { color:var(--txt); border-color:var(--accent); }
+  .hl { color:var(--accent2); } .gold { color:var(--warn); }
+</style>
+</head>
+<body>
+
+<section class="slide" id="intro">
+  <div class="inner">
+    <div class="kicker">WhatsApp Agent Base</div>
+    <h1>A foundation for WhatsApp&nbsp;Business&nbsp;SaaS.</h1>
+    <p class="lead">Not an app — a <b>base you build on</b>. Multi-tenant, provider-agnostic, with a durable AI engine, encrypted credentials, and an admin panel. You write your domain; the plumbing is done.</p>
+    <div class="grid">
+      <div class="card"><span class="tag">Tenancy</span><h3>Multi-tenant core</h3><p><code>tenant_id</code> on every row. Inbound resolves via <code>channels(provider, externalId)</code>; admin resolves via session. Isolation is a security boundary.</p></div>
+      <div class="card"><span class="tag">Providers</span><h3>YCloud · Meta · Chatwoot</h3><p>One <code>MessagingProvider</code> interface, three adapters. Webhooks are thin shells; the engine is shared.</p></div>
+      <div class="card"><span class="tag">AI</span><h3>Any OpenAI-compatible model</h3><p>Per-tenant <code>ai_*</code> config — OpenAI, OpenRouter, DeepSeek, Groq, Ollama. Tools are built per tenant by construction.</p></div>
+      <div class="card"><span class="tag">Safety</span><h3>Fail closed</h3><p>Signature, dedup, or CAS uncertainty → no reply. Idempotent effects. Encrypted secrets. Rate-limited webhooks.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="flow">
+  <div class="inner">
+    <div class="kicker">The pipeline</div>
+    <h2>How a message becomes a reply</h2>
+    <div class="flow">
+      <div class="fstep"><div class="fnum">1</div><div class="fbody"><b>Webhook</b><span>rate limit → raw body → JSON parse → <code>isNoise</code> filter</span></div></div>
+      <div class="fstep"><div class="fnum">2</div><div class="fbody"><b>Normalize</b><span><code>provider.parseInbound()</code> → <code>NormalizedInbound[]</code></span></div></div>
+      <div class="fstep"><div class="fnum">3</div><div class="fbody"><b>Resolve tenant</b><span><code>channels(provider, externalId)</code> → <code>tenantId</code></span></div></div>
+      <div class="fstep"><div class="fnum">4</div><div class="fbody"><b>Verify signature</b><span>HMAC with <i>that tenant's</i> secret — fail closed</span></div></div>
+      <div class="fstep"><div class="fnum">5</div><div class="fbody"><b>Dedup + persist</b><span>unique <code>(tenant_id, platform_message_id)</code>; lead upsert; conversation upsert</span></div></div>
+      <div class="fstep"><div class="fnum">6</div><div class="fbody"><b>Session policy (CAS)</b><span>state machine decides: ack · clarify · handoff · block · allow_agent</span></div></div>
+      <div class="fstep"><div class="fnum">7</div><div class="fbody"><b>Buffer → Agent → Send</b><span>debounce, then tenant-scoped tools + per-tenant model; reply via <code>provider.send</code></span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="layers">
+  <div class="inner">
+    <div class="kicker">Design</div>
+    <h2>Layers you can replace</h2>
+    <table>
+      <tr><th>Layer</th><th>Path</th><th>Replace with</th></tr>
+      <tr><td>Webhooks</td><td><code>src/app/api/*/webhook</code></td><td>thin shells — rate-limit → verify → dispatch</td></tr>
+      <tr><td>Engine</td><td><code>src/lib/engine/inbound-processor.ts</code></td><td>provider-agnostic orchestration</td></tr>
+      <tr><td>Session policy</td><td><code>src/lib/whatsapp/session-*</code></td><td>state machine + CAS + effect claims</td></tr>
+      <tr><td>Providers</td><td><code>src/lib/providers/</code></td><td>ycloud · meta · chatwoot adapters</td></tr>
+      <tr><td>AI</td><td><code>src/lib/agent/ + ai/</code></td><td>tenant-scoped tools + config</td></tr>
+      <tr><td>Infra</td><td><code>buffer · queue · credentials · tenants</code></td><td>Redis, DLQ, AES-256, resolution</td></tr>
+      <tr><td>Data</td><td><code>src/db/schema.ts</code></td><td>tenants first — everything else inherits</td></tr>
+    </table>
+    <pre>provider webhook
+  → verify signature        <span class="c">// per-tenant secret</span>
+  → parseInbound            <span class="c">// NormalizedInbound</span>
+  → resolve tenant/channel
+  → session policy (CAS)    <span class="c">// fail closed</span>
+  → buffer → agent → provider.send</pre>
+  </div>
+</section>
+
+<section class="slide" id="decisions">
+  <div class="inner">
+    <div class="kicker">The anti-LLM firewall</div>
+    <h2>The session policy decides <span class="hl">before</span> spending tokens</h2>
+    <div class="grid">
+      <div class="card"><h3>fixed_ack</h3><p>First casual message → one canned acknowledgment. No LLM.</p></div>
+      <div class="card"><h3>fixed_clarification</h3><p>Ambiguous follow-up → one clarifying question, once.</p></div>
+      <div class="card"><h3>handoff</h3><p>Human requested → idempotent claims: notify owner once, tell customer once, set override.</p></div>
+      <div class="card"><h3>blocked / duplicate</h3><p>Human owns the thread, or the webhook is a replay → silence.</p></div>
+      <div class="card"><h3>allow_agent</h3><p>Commercial flow → agent runs with compact session facts, not raw state.</p></div>
+      <div class="card"><h3>CAS transitions</h3><p><code>version</code> counter on session row — racing deliveries can't both pass.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="security">
+  <div class="inner">
+    <div class="kicker">Security</div>
+    <h2>Fail closed, by default</h2>
+    <table>
+      <tr><th>Threat</th><th>Control</th></tr>
+      <tr><td>Forged webhook</td><td>Per-tenant HMAC signature — never a global secret</td></tr>
+      <tr><td>Replay</td><td>Timestamp tolerance + unique dedup index + CAS</td></tr>
+      <tr><td>Cross-tenant leak</td><td><code>tenant_id NOT NULL</code> + scoped queries + per-tenant tools</td></tr>
+      <tr><td>Secret exposure</td><td>AES-256 at rest; UI shows presence only; never logged</td></tr>
+      <tr><td>Duplicate effects</td><td>Effect-claim table — reply/notify once per episode</td></tr>
+      <tr><td>Flooding</td><td>Rate limit per IP on every webhook</td></tr>
+      <tr><td>Provider outage</td><td>Queue + DLQ + circuit breaker; no silent drops</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="slide" id="next">
+  <div class="inner">
+    <div class="kicker">Next</div>
+    <h2>Build on top</h2>
+    <p class="lead">Next deck: <b>building-on-top.html</b> — setup, tenancy model, how to add a provider, and the rules for AI coding agents.</p>
+    <p style="margin-top:24px">Docs: <code>docs/architecture.md</code> · <code>docs/multi-tenancy.md</code> · <code>docs/providers.md</code> · <code>docs/security.md</code></p>
+  </div>
+</section>
+
+<div class="nav"><a href="#intro">Top</a><a href="02-building-on-top.html">Next deck →</a></div>
+</body>
+</html>

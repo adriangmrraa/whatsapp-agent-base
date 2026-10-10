@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Agent Base — Build On Top</title>
+<style>
+  :root { --bg:#0a0a0f; --panel:#12121a; --line:rgba(255,255,255,.08); --txt:#e8e8ee; --dim:#9a9aad; --accent:#7c6cff; --accent2:#2dd4bf; --warn:#f59e0b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--txt); font-family:"Segoe UI",system-ui,sans-serif; }
+  .slide { min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:64px 24px; border-bottom:1px solid var(--line); }
+  .slide:last-child { border-bottom:none; }
+  .inner { max-width:960px; width:100%; }
+  .kicker { font-size:13px; letter-spacing:.25em; text-transform:uppercase; color:var(--accent2); margin-bottom:16px; }
+  h1 { font-size:clamp(36px,5.5vw,64px); font-weight:800; line-height:1.05; margin-bottom:24px; }
+  h2 { font-size:clamp(26px,4vw,42px); font-weight:700; margin-bottom:26px; }
+  h3 { font-size:17px; margin-bottom:10px; color:var(--accent); }
+  p, li { font-size:16.5px; line-height:1.65; color:var(--dim); }
+  .lead { font-size:20px; color:var(--txt); max-width:780px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:26px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .card p { font-size:14px; }
+  code, .mono { font-family:"Cascadia Code",Consolas,monospace; font-size:.88em; color:#c4b5fd; }
+  pre { background:#0d0d14; border:1px solid var(--line); border-radius:12px; padding:18px 20px; overflow-x:auto; margin-top:18px; font-family:"Cascadia Code",Consolas,monospace; font-size:13px; line-height:1.6; color:#c8c8d4; }
+  pre .c { color:#5a5a70; } pre .k { color:var(--accent2); }
+  table { width:100%; border-collapse:collapse; margin-top:18px; font-size:14px; }
+  th { text-align:left; padding:9px 12px; color:var(--txt); border-bottom:1px solid var(--line); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; }
+  td { padding:9px 12px; border-bottom:1px solid var(--line); color:var(--dim); }
+  .rule { display:flex; gap:14px; padding:13px 0; border-bottom:1px solid var(--line); }
+  .rule:last-child { border-bottom:none; }
+  .rn { flex-shrink:0; width:26px; height:26px; border-radius:8px; background:var(--warn); color:#111; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; }
+  .rule p { font-size:15px; }
+  .nav { position:fixed; bottom:18px; right:24px; display:flex; gap:8px; }
+  .nav a { color:var(--dim); text-decoration:none; font-size:12px; padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:rgba(18,18,26,.8); }
+  .nav a:hover { color:var(--txt); border-color:var(--accent); }
+  .hl { color:var(--accent2); }
+</style>
+</head>
+<body>
+
+<section class="slide" id="setup">
+  <div class="inner">
+    <div class="kicker">Build on top</div>
+    <h1>From clone to running agent.</h1>
+    <pre><span class="c"># clone + install</span>
+git clone https://github.com/adriangmrraa/whatsapp-agent-base.git
+cd whatsapp-agent-base && npm install
+
+<span class="c"># environment — DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY, AI creds</span>
+cp .env.example .env.local
+
+<span class="c"># database — full multi-tenant schema + seed</span>
+npm run db:migrate && npm run db:seed
+
+<span class="c"># run</span>
+npm run dev</pre>
+    <p style="margin-top:20px">Login <code>/login</code> → <code>admin@example.com</code> / <code>ADMIN_PASSWORD</code>. Your tenant is the <code>DEFAULT_TENANT_SLUG</code> row created by the seed.</p>
+  </div>
+</section>
+
+<section class="slide" id="tenancy">
+  <div class="inner">
+    <div class="kicker">The tenancy model</div>
+    <h2>Two ways a request finds its tenant</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Inbound webhook</h3>
+        <pre><span class="k">resolveChannel</span>(provider, externalId)
+  <span class="c">// channels table → tenantId</span>
+<span class="c">// ycloud: business number (`to`)</span>
+<span class="c">// meta:   metadata.phone_number_id</span>
+<span class="c">// chatwoot: account/inbox id</span></pre>
+      </div>
+      <div class="card">
+        <h3>Admin session</h3>
+        <pre><span class="k">requireTenantId</span>()
+  <span class="c">// session.user.tenantId (JWT)</span>
+  <span class="c">// throws when absent — fail closed</span></pre>
+      </div>
+    </div>
+    <table>
+      <tr><th>Table</th><th>Scope key</th></tr>
+      <tr><td>conversations</td><td><code>UNIQUE(tenant_id, whatsapp_id)</code></td></tr>
+      <tr><td>leads</td><td><code>UNIQUE(tenant_id, phone)</code></td></tr>
+      <tr><td>users</td><td><code>UNIQUE(email, tenant_id)</code></td></tr>
+      <tr><td>chat_messages dedup</td><td><code>UNIQUE(tenant_id, platform_message_id)</code></td></tr>
+      <tr><td>credentials</td><td><code>UNIQUE(tenant_id, provider, key)</code> — AES-256</td></tr>
+      <tr><td>agent_config</td><td><code>UNIQUE(tenant_id)</code> — one config per tenant</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="slide" id="providers">
+  <div class="inner">
+    <div class="kicker">Providers</div>
+    <h2>One interface, many transports</h2>
+    <pre><span class="k">interface</span> MessagingProvider {
+  provider: ChannelProvider
+  verifySignature({ rawBody, headers, credentials })
+  isNoise(payload)
+  parseInbound(payload) → NormalizedInbound[]
+  send({ credentials, channelExternalId, to, payload })
+}</pre>
+    <table>
+      <tr><th>Provider</th><th>Webhook</th><th>Channel identity</th><th>Secrets</th></tr>
+      <tr><td>YCloud</td><td><code>/api/webhook/whatsapp</code></td><td>business number (<code>to</code>)</td><td><code>ycloud.api_key · webhook_secret</code></td></tr>
+      <tr><td>Meta Cloud</td><td><code>/api/meta/webhook</code> + OAuth</td><td><code>phone_number_id</code></td><td><code>meta.access_token · app_secret</code></td></tr>
+      <tr><td>Chatwoot</td><td><code>/api/chatwoot/webhook</code></td><td>account/inbox id</td><td><code>chatwoot.api_token</code></td></tr>
+      <tr><td>Telegram</td><td><i>add yours</i></td><td>bot username / chat id</td><td><code>telegram.bot_token</code></td></tr>
+    </table>
+    <p style="margin-top:18px"><b>Add a provider:</b> enum → adapter file → registry entry + credential keys → thin webhook route. ~150 lines. Full checklist: <code>docs/providers.md</code>.</p>
+  </div>
+</section>
+
+<section class="slide" id="rules">
+  <div class="inner">
+    <div class="kicker">Non-negotiables (AGENTS.md)</div>
+    <h2>Rules every agent — human or AI — must keep</h2>
+    <div>
+      <div class="rule"><div class="rn">1</div><p><b>Tenant isolation is law.</b> Every tenant-owned query filters by <code>tenant_id</code>; every server action starts with <code>requireTenantId()</code>; agent tools are built inside <code>buildAgentTools(tenantId, …)</code>. A global <code>limit(1)</code> is a security bug.</p></div>
+      <div class="rule"><div class="rn">2</div><p><b>Fail closed.</b> Signature, dedup, or CAS uncertainty → no mutation, no reply.</p></div>
+      <div class="rule"><div class="rn">3</div><p><b>Secrets stay server-side.</b> <code>setCredential</code>/<code>getCredential</code> only — never client props, never logs.</p></div>
+      <div class="rule"><div class="rn">4</div><p><b>Provider-agnostic core.</b> Business logic lives in <code>src/lib/engine/</code> against <code>MessagingProvider</code> — no provider SDKs outside adapters.</p></div>
+      <div class="rule"><div class="rn">5</div><p><b>Idempotent effects.</b> Replies, notifications, provider calls are claimed before they fire.</p></div>
+      <div class="rule"><div class="rn">6</div><p><b>Stay generic.</b> Vertical logic (pizza, clinic, store) goes in your tools/schema extensions — not in the base.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="agent">
+  <div class="inner">
+    <div class="kicker">For AI coding agents</div>
+    <h2>The contract before the first edit</h2>
+    <div class="grid">
+      <div class="card"><h3>Read order</h3><p><code>README → docs/architecture → docs/multi-tenancy → AGENTS.md → schema.ts → inbound-processor → providers/types</code>. Don't guess — ask the human.</p></div>
+      <div class="card"><h3>Ask first</h3><p>Which provider(s)? Which AI endpoint? Fresh DB or upgrade? Which vertical? Local or CI?</p></div>
+      <div class="card"><h3>Harness</h3><p><code>.env.local</code> filled → <code>db:migrate</code> → <code>db:seed</code> → green <code>tsc · eslint · build</code> before and after.</p></div>
+      <div class="card"><h3>Schema changes</h3><p><code>db:generate</code> needs a TTY; on Windows use <code>generate --custom</code> + hand-written SQL with backfill (nullable → UPDATE → NOT NULL).</p></div>
+      <div class="card"><h3>Safe test path</h3><p>Call <code>processInbound()</code> with a fabricated <code>NormalizedInbound</code> against a seeded test tenant — exercises tenant→session→routing without network.</p></div>
+      <div class="card"><h3>Full guide</h3><p><code>docs/for-ai-agents.md</code> — invariants, pitfalls, checklists.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="done">
+  <div class="inner">
+    <div class="kicker">Done</div>
+    <h2>The base is <span class="hl">yours</span>.</h2>
+    <p class="lead">Extend the schema with your domain, add your tools, connect your channels. Everything tenant-owned stays isolated; everything sensitive stays encrypted; everything retried stays exactly-once.</p>
+    <p style="margin-top:26px"><code>docs/architecture.md · docs/multi-tenancy.md · docs/providers.md · docs/security.md · docs/deployment.md · docs/for-ai-agents.md</code></p>
+  </div>
+</section>
+
+<div class="nav"><a href="01-what-is-this.html">← Prev deck</a><a href="#setup">Top</a></div>
+</body>
+</html>

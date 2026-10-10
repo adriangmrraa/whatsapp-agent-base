@@ -1,212 +1,92 @@
 # WhatsApp Agent Base
 
-**AI-powered WhatsApp Business Platform** — automated customer service, order management, lead capture, and analytics with a full admin panel.
+**A multi-tenant, provider-agnostic foundation for building WhatsApp Business SaaS products.**
 
-Built on Next.js 16, Drizzle ORM, and the Vercel AI SDK with OpenAI. Integrates with YCloud for WhatsApp messaging and supports Telegram as a secondary channel.
+This is not an application — it is a production-grade base you build *on top of*. It ships the hard parts already solved: tenant isolation, encrypted per-tenant credentials, provider adapters (YCloud, Meta Cloud API, Chatwoot), a durable AI session state machine, webhook signature verification, idempotency, rate limiting, buffering, and an admin panel — so your product is your schema extensions and your tools, not plumbing.
 
----
-
-## Features
-
-### AI Agent
-- 15-tool OpenAI assistant with context-aware conversation handling
-- **Hallucination guard**: loop detection, anti-spam, prompt security
-- Automatic order placement, product lookup, lead enrichment, address management
-- Configurable system prompt and business rules via admin panel
-
-### WhatsApp Integration (YCloud)
-- Inbound webhook → lead capture → conversation management
-- Two-way messaging with media support (images, audio, documents)
-- Auto-reply within 24h window, human override for complex queries
-- Duplicate order detection with configurable time window
-
-### Admin Panel
-| Section | Description |
-|---------|-------------|
-| **Dashboard** | Stats, recent activity, action cards |
-| **Conversations** | 3-panel inbox — sidebar, chat, context panel. Human takeover, message history with media |
-| **Products** | Full CRUD, search/filter/paginate, stock management, variants, promo pricing |
-| **Orders** | Status workflow (pending → preparing → ready → delivered), payment tracking, search |
-| **Promotions** | CRUD with product bundles, custom pricing, active/inactive toggle |
-| **Leads** | Full CRUD, detail sheet, status tracking (new → contacted → converted → lost) |
-| **Agent Config** | 7-section collapsible form — General, WhatsApp Bot, Telegram Bot, WhatsApp Agent, Business Ops, Business Status, Meta OAuth |
-| **Analytics** | Daily order time series, revenue stats, lead conversion rate, top products |
-
-### Telegram Integration
-- Bot-based notifications and fallback channel
-- Configurable token, chat ID, and webhook
+**Repository:** `github.com/adriangmrraa/whatsapp-agent-base`
+The code lives locally *and* on GitHub — clone it, fork it, or use it as a template.
 
 ---
 
-## Tech Stack
+## What you get
 
-| Layer | Technology |
-|-------|-----------|
-| **Framework** | Next.js 16 (App Router, Turbopack) |
-| **Language** | TypeScript 5 |
-| **Database** | PostgreSQL (Neon) + Drizzle ORM |
-| **Auth** | NextAuth v5 (Credentials provider) |
-| **AI** | Vercel AI SDK + OpenAI (GPT-4o) |
-| **WhatsApp** | YCloud API |
-| **UI** | Tailwind CSS 4, Radix UI primitives, Framer Motion, Lucide icons |
-| **Rate Limiting** | Upstash Redis |
-| **Encryption** | AES-256 via SHA-256 derived key |
-| **Logging** | Pino with pretty-print |
+| Capability | How it works |
+|---|---|
+| **Multi-tenant core** | `tenant_id` on every business row; resolution via `channels` (provider + external id) for inbound, session `tenantId` for admin |
+| **Provider-agnostic messaging** | `MessagingProvider` interface → adapters for **YCloud**, **Meta Cloud API**, **Chatwoot**; add yours in ~150 lines |
+| **Provider-agnostic AI** | Any OpenAI-compatible endpoint per tenant (OpenAI, OpenRouter, DeepSeek, Groq, Together, Ollama) |
+| **Durable session engine** | Per-conversation state machine (commercial / personal_acknowledged / handed_off) with compare-and-swap + idempotent side effects — survives restarts, suppresses duplicate webhooks, avoids unnecessary LLM calls |
+| **Human handoff** | Agent or human can claim a conversation; `human_override` window silences the AI; Chatwoot inbox bridging included |
+| **Security** | AES-256 encrypted credentials, per-tenant webhook signature verification, fail-closed dedup/CAS, rate limiting, secret redaction in logs |
+| **Admin panel** | Conversations inbox, orders, products, leads, promotions, analytics, agent config — all tenant-scoped |
+| **Resilience** | Redis message buffer (+in-memory fallback), outbound queue with DLQ, circuit breakers, cron flush endpoint |
 
----
+## Stack
 
-## Quick Start
+Next.js 16 (App Router) · TypeScript 5 · PostgreSQL + Drizzle ORM · NextAuth v5 · Vercel AI SDK · Upstash Redis (optional) · Tailwind 4 + Radix UI.
 
-### Prerequisites
-- Node.js 20+
-- PostgreSQL database (Neon or local)
-- OpenAI API key
-- YCloud account (WhatsApp provider)
-- Upstash Redis (rate limiting)
-
-### Setup
+## Quick start
 
 ```bash
-# clone and install
 git clone https://github.com/adriangmrraa/whatsapp-agent-base.git
 cd whatsapp-agent-base
 npm install
 
-# environment
-cp .env.example .env.local
-# fill in DATABASE_URL, AUTH_SECRET, OPENAI_API_KEY, YCLOUD_API_KEY, UPSTASH_REDIS_*
-# generate AUTH_SECRET: openssl rand -base64 32
-
-# database
-npm run db:push
-npm run db:seed
-
-# dev
+cp .env.example .env.local   # fill DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY, AI creds
+npm run db:migrate           # or `npm run db:push` for a fresh dev DB
+npm run db:seed              # creates default tenant + admin + sample catalog
 npm run dev
 ```
 
-### First Login
+Login at `http://localhost:3000/login` — `admin@example.com` / `ADMIN_PASSWORD` (default `admin123`).
 
-1. Open `http://localhost:3000/login`
-2. Default credentials (set via `ADMIN_PASSWORD` env):
-   - **Email**: `admin@example.com`
-   - **Password**: from `ADMIN_PASSWORD` (default: `admin123`)
-
-> Change `ADMIN_PASSWORD` before going to production.
-
----
-
-## Architecture
+## How a message flows
 
 ```
-src/
-├── app/
-│   ├── (admin)/admin/   # Admin panel (protected)
-│   │   ├── agent/       # Agent configuration
-│   │   ├── analytics/   # Dashboard analytics
-│   │   ├── conversations/# 3-panel inbox
-│   │   ├── leads/       # Lead management
-│   │   ├── orders/      # Order CRUD
-│   │   ├── products/    # Product CRUD
-│   │   ├── promotions/  # Promotions CRUD
-│   │   └── page.tsx     # Dashboard overview
-│   ├── login/           # Auth
-│   └── api/             # API routes
-│       ├── auth/        # NextAuth
-│       └── webhook/     # YCloud WhatsApp webhook
-├── auth/                # NextAuth configuration
-├── components/ui/       # UI primitives (Button, Card, Input, etc.)
-├── db/                  # Schema, connection, seed
-│   └── schema.ts        # 10 tables, 8 enums
-├── lib/
-│   ├── agent/           # AI agent (system prompt, 15 tools, orchestrator)
-│   ├── whatsapp/        # WhatsApp message handlers
-│   ├── ycloud/          # YCloud API client
-│   └── conversations/   # Conversation business logic
-└── types/               # Shared TypeScript types
+webhook (ycloud | meta | chatwoot)
+  → rate limit → parse → resolveChannel(provider, externalId) → tenant
+  → verify signature with that tenant's secret        [fail closed]
+  → dedup by platform message id (unique index)        [fail closed]
+  → session policy CAS transition                      [fail closed]
+  → route: fixed_ack | clarification | handoff | allow_agent | blocked
+  → allow_agent → Redis buffer (debounce) → AI agent (tenant-scoped tools)
+  → provider.send → persist outbound → audit event
 ```
 
-### Key Data Model
+## Documentation
 
-- **Conversations** — WhatsApp threads with message history, human override, metadata
-- **Leads** — Captured contacts with UTM tracking, tags, status pipeline
-- **Products** — Catalog with variants, pricing, stock, promo support
-- **Orders** — From lead context → order with status workflow + delivery tracking
-- **AgentConfig** — Single-row configuration for all agent behavior
-- **Promotions** — Product bundles with custom pricing
-- **Attachments** — Media files linked to leads, conversations, and messages
+| Doc | Contents |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | Layers, data flow, design rationale |
+| [`docs/multi-tenancy.md`](docs/multi-tenancy.md) | Tenant model, resolution, isolation rules |
+| [`docs/providers.md`](docs/providers.md) | YCloud / Meta / Chatwoot setup + how to add a provider |
+| [`docs/ai-engine.md`](docs/ai-engine.md) | Agent tools, session policy, buffer, queue |
+| [`docs/security.md`](docs/security.md) | Threat model, credentials, fail-closed rules |
+| [`docs/deployment.md`](docs/deployment.md) | Production checklist, cron, env reference |
+| [`docs/for-ai-agents.md`](docs/for-ai-agents.md) | **Guide for AI coding agents** — how to explore, what context to ask for, harness requirements |
+| [`docs/presentations/`](docs/presentations/) | Self-contained HTML decks — open in a browser, no server needed |
+| [`AGENTS.md`](AGENTS.md) | Rules any AI/human agent must follow in this repo |
 
----
+## Build your product on top
 
-## Database
+The base is intentionally generic. To ship a vertical product (pizzeria, clinic, store):
 
-The schema defines 10 tables and 8 PostgreSQL enums. `drizzle-kit` manages migrations:
+1. Extend `src/db/schema.ts` with your domain tables — **always include `tenantId`**.
+2. Add agent tools in `src/lib/agent/tools.ts` via `buildAgentTools(tenantId, phone)`.
+3. Tune the system prompt per tenant in `agent_config` (admin UI or seed).
+4. Connect channels: YCloud env vars, Meta OAuth button in admin, or Chatwoot config.
+5. Keep every query tenant-scoped — see [`AGENTS.md`](AGENTS.md) for the isolation rules.
+
+See [`docs/for-ai-agents.md`](docs/for-ai-agents.md) if you're driving this repo with a coding agent.
+
+## Verification
 
 ```bash
-npm run db:generate   # Generate migration
-npm run db:push       # Push schema (dev)
-npm run db:migrate    # Apply migrations
-npm run db:seed       # Seed initial admin user
-npm run db:studio     # Drizzle Studio (GUI)
+npx tsc --noEmit    # typecheck
+npx eslint src      # lint
+npm run build       # production build
 ```
-
----
-
-## API Routes
-
-| Route | Purpose |
-|-------|---------|
-| `POST /api/auth/[...nextauth]` | NextAuth credentials login |
-| `POST /api/webhook/whatsapp` | YCloud inbound webhook — message receive, status callbacks |
-
-All admin routes are server-rendered, `force-dynamic`. No REST API for admin operations — server actions handle all mutations.
-
----
-
-## Admin Panel Screens
-
-Login → protected admin routes. UI primitives use Radix UI + Tailwind CSS 4 with a neutral dark theme.
-
-- **Dashboard**: Stats cards, recent orders, action shortcuts
-- **Conversations**: Real-time 3-panel inbox with React Query polling
-- **Products**: Filterable grid, inline availability toggle, variants editor
-- **Orders**: Status management with payment tracking, search
-- **Leads**: Detail sheet with status workflow and conversation link
-- **Promotions**: Product bundles, active/inactive toggle
-- **Agent Config**: 7 collapsible sections, global save with toast feedback
-- **Analytics**: Server-rendered metrics, date range toggle (7d/30d)
-
----
-
-## Environment Variables
-
-See `.env.example` for all required variables. Key ones:
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `AUTH_SECRET` | NextAuth encryption secret |
-| `OPENAI_API_KEY` | OpenAI API key for AI agent |
-| `YCLOUD_API_KEY` | YCloud WhatsApp API key |
-| `YCLOUD_WEBHOOK_SECRET` | Webhook signature verification |
-| `UPSTASH_REDIS_REST_URL` | Rate limiting backend |
-| `ENCRYPTION_KEY` | 32+ char string for AES encryption |
-| `DUPLICATE_ORDER_WINDOW_MINUTES` | Duplicate detection window (default 15) |
-
----
-
-## Deployment
-
-Deploy to any Node.js 20+ hosting:
-
-```bash
-npm run build
-npm start
-```
-
-For Vercel: connect the repo, set env vars, build command `npm run build` auto-detected.
-
----
 
 ## License
 
