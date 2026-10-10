@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createEngramMemoryProvider } from "./engram";
-import { createNeonMemoryProvider, type NeonMemoryClient } from "./neon";
+import {
+  createNeonDrizzleClient,
+  createNeonMemoryProvider,
+  type NeonMemoryClient,
+} from "./neon";
 import { createNoneMemoryProvider } from "./none";
-import { resolveMemoryProvider } from "./registry";
+import { getMemoryProvider, resolveMemoryProvider } from "./registry";
 
 // ─── Engram (injected fetch) ─────────────────────────────────────────────────
 
@@ -116,7 +120,7 @@ function fakeClient(overrides: Partial<NeonMemoryClient> = {}): NeonMemoryClient
 }
 
 test("neon: maps rows and scopes by tenant + project", async () => {
-  let seenTenant = -1;
+  let seenTenant: number | null = -1;
   let seenProject = "";
   const client = fakeClient({
     async search(input) {
@@ -149,6 +153,37 @@ test("neon: fails soft when the query throws", async () => {
   assert.equal(await memory.get("1"), "");
 });
 
+test("neon: an absent tenant uses the harness (null) scope, never unscoped", async () => {
+  let seenTenant: number | null | undefined;
+  let savedTenant: number | null | undefined;
+  const client = fakeClient({
+    async search(input) {
+      seenTenant = input.tenantId;
+      return [];
+    },
+    async save(input) {
+      savedTenant = input.tenantId;
+      return "9";
+    },
+  });
+  const memory = createNeonMemoryProvider({ client });
+  assert.equal(memory.name, "neon");
+  await memory.search("q");
+  await memory.save({ title: "t", topicKey: "k", type: "x", content: "c" });
+  assert.equal(seenTenant, null);
+  assert.equal(savedTenant, null);
+});
+
+test("neon: is constructible from a DATABASE_URL (standalone harness)", () => {
+  const client = createNeonDrizzleClient({
+    databaseUrl: "postgresql://user:pass@localhost:5432/harness",
+  });
+  assert.equal(typeof client.search, "function");
+  assert.equal(typeof client.get, "function");
+  assert.equal(typeof client.save, "function");
+  assert.equal(typeof client.recent, "function");
+});
+
 // ─── None ────────────────────────────────────────────────────────────────────
 
 test("none: every method is empty", async () => {
@@ -161,8 +196,10 @@ test("none: every method is empty", async () => {
 
 // ─── Registry ────────────────────────────────────────────────────────────────
 
-test("registry: JEV_MEMORY selects the backend; default is engram", () => {
+test("registry: JEV_MEMORY selects the backend; default is local Engram", () => {
   assert.equal(resolveMemoryProvider({ env: {} }).name, "engram");
+  assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "local" } }).name, "engram");
+  assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "engram" } }).name, "engram");
   assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "none" } }).name, "none");
   assert.equal(
     resolveMemoryProvider({ env: { JEV_MEMORY: "neon" }, tenantId: 3 }).name,
@@ -171,8 +208,42 @@ test("registry: JEV_MEMORY selects the backend; default is engram", () => {
   assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "bogus" } }).name, "engram");
 });
 
-test("registry: neon without a tenant degrades to none (no unscoped query)", () => {
-  assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "neon" } }).name, "none");
+test("registry: neon without a tenant uses the harness scope (no degrade to none)", () => {
+  assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "neon" } }).name, "neon");
+  assert.equal(
+    resolveMemoryProvider({ backend: "neon", env: {} }).name,
+    "neon",
+  );
+});
+
+test("registry: cloud uses ENGRAM_CLOUD_URL; local uses ENGRAM_HTTP_URL", async () => {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string | URL) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify([]), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const local = resolveMemoryProvider({
+    env: { JEV_MEMORY: "local", ENGRAM_HTTP_URL: "http://local.example:1111" },
+    fetchFn,
+  });
+  assert.equal(local.name, "engram");
+  await local.search("q");
+  assert.ok(calls[0].startsWith("http://local.example:1111"));
+
+  const cloud = resolveMemoryProvider({
+    env: {
+      JEV_MEMORY: "cloud",
+      ENGRAM_CLOUD_URL: "https://cloud.example",
+      ENGRAM_CLOUD_TOKEN: "secret",
+    },
+    fetchFn,
+  });
+  assert.equal(cloud.name, "cloud");
+  await cloud.search("q");
+  assert.ok(calls[1].startsWith("https://cloud.example"));
+
+  assert.equal(resolveMemoryProvider({ env: { JEV_MEMORY: "cloud" } }).name, "none");
 });
 
 test("registry: explicit backend beats env", () => {
@@ -180,4 +251,12 @@ test("registry: explicit backend beats env", () => {
     resolveMemoryProvider({ backend: "none", env: { JEV_MEMORY: "engram" } }).name,
     "none",
   );
+});
+
+test("registry: getMemoryProvider stays backwards-compatible", () => {
+  const provider = getMemoryProvider();
+  assert.equal(typeof provider.search, "function");
+  assert.equal(typeof provider.get, "function");
+  assert.equal(typeof provider.save, "function");
+  assert.equal(typeof provider.context, "function");
 });

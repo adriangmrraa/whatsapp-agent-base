@@ -43,6 +43,13 @@
       "when": 1791700100000,
       "tag": "0005_jen_memory",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791700200000,
+      "tag": "0006_jen_memory_nullable_tenant",
+      "breakpoints": true
     }
   ]
 }

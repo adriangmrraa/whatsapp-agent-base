@@ -1,6 +1,9 @@
-import { and, desc, eq, ilike } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, type SQL } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import { db } from "@/db";
 import { jenMemory } from "@/db/schema";
+import * as schema from "@/db/schema";
 import type {
   MemRef,
   MemoryContextOptions,
@@ -16,9 +19,25 @@ import type {
 // `tenant_id` (isolation law) and `project` (harness namespace). Search is a
 // simple case-insensitive substring match — no embeddings required.
 //
+// Scope is EXPLICIT, never absent: a numeric tenantId filters
+// `tenant_id = $n`; a null tenantId (the dev harness has no tenant) filters
+// `tenant_id IS NULL` (the harness/global rows). It never runs an unscoped
+// query, so product rows (which always carry a tenant_id) can never leak.
+//
 // The whole DB surface is behind `NeonMemoryClient` so the provider itself is
-// unit-testable with an injected fake; the default client lazily touches the
-// shared Drizzle connection. Like every MemoryProvider, it fails SOFT.
+// unit-testable with an injected fake. The default client is built either from
+// the shared Drizzle connection (the app) or from an explicit DATABASE_URL (a
+// standalone harness) — both are created LAZILY so importing is build-safe.
+// Like every MemoryProvider, it fails SOFT.
+
+/** Tenant scope: numeric → equality; null → harness/global (IS NULL). */
+type TenantId = number | null;
+
+function tenantScope(tenantId: TenantId): SQL {
+  return tenantId === null
+    ? isNull(jenMemory.tenantId)
+    : eq(jenMemory.tenantId, tenantId);
+}
 
 export interface JenMemoryRow {
   id: string;
@@ -30,7 +49,7 @@ export interface JenMemoryRow {
 }
 
 export interface NeonMemorySearchInput {
-  tenantId: number;
+  tenantId: TenantId;
   project: string;
   query: string;
   limit: number;
@@ -38,10 +57,10 @@ export interface NeonMemorySearchInput {
 
 export interface NeonMemoryClient {
   search(input: NeonMemorySearchInput): Promise<JenMemoryRow[]>;
-  get(input: { tenantId: number; project: string; id: string }): Promise<JenMemoryRow | null>;
+  get(input: { tenantId: TenantId; project: string; id: string }): Promise<JenMemoryRow | null>;
   save(
     input: {
-      tenantId: number;
+      tenantId: TenantId;
       project: string;
       title: string;
       topicKey: string;
@@ -49,22 +68,47 @@ export interface NeonMemoryClient {
       content: string;
     },
   ): Promise<string>;
-  recent(input: { tenantId: number; project: string; limit: number }): Promise<JenMemoryRow[]>;
+  recent(input: { tenantId: TenantId; project: string; limit: number }): Promise<JenMemoryRow[]>;
 }
 
 export const NEON_DEFAULT_PROJECT = "default";
 const RECENT_LIMIT = 10;
 
-/** Drizzle-backed client. `db` is a lazy proxy, so importing is build-safe. */
-export function createNeonDrizzleClient(): NeonMemoryClient {
+export interface NeonDrizzleClientOptions {
+  /**
+   * Standalone-harness connection string. When provided, the client builds its
+   * own Neon HTTP connection instead of using the app's shared `db` proxy.
+   */
+  databaseUrl?: string;
+}
+
+/**
+ * Drizzle-backed client. The connection is created LAZILY (on first query), so
+ * importing this module — and calling the factory — is build- and test-safe
+ * even with no DATABASE_URL present.
+ */
+export function createNeonDrizzleClient(
+  options: NeonDrizzleClientOptions = {},
+): NeonMemoryClient {
+  let cached: typeof db | null = null;
+
+  function database(): typeof db {
+    if (!cached) {
+      cached = options.databaseUrl
+        ? drizzle(neon(options.databaseUrl), { schema })
+        : db;
+    }
+    return cached;
+  }
+
   return {
     async search({ tenantId, project, query, limit }) {
-      const rows = await db
+      const rows = await database()
         .select()
         .from(jenMemory)
         .where(
           and(
-            eq(jenMemory.tenantId, tenantId),
+            tenantScope(tenantId),
             eq(jenMemory.project, project),
             ilike(jenMemory.content, `%${query}%`),
           ),
@@ -77,12 +121,12 @@ export function createNeonDrizzleClient(): NeonMemoryClient {
     async get({ tenantId, project, id }) {
       const numeric = Number.parseInt(id, 10);
       if (!Number.isFinite(numeric)) return null;
-      const [row] = await db
+      const [row] = await database()
         .select()
         .from(jenMemory)
         .where(
           and(
-            eq(jenMemory.tenantId, tenantId),
+            tenantScope(tenantId),
             eq(jenMemory.project, project),
             eq(jenMemory.id, numeric),
           ),
@@ -92,7 +136,7 @@ export function createNeonDrizzleClient(): NeonMemoryClient {
     },
 
     async save({ tenantId, project, title, topicKey, type, content }) {
-      const [row] = await db
+      const [row] = await database()
         .insert(jenMemory)
         .values({ tenantId, project, title, topicKey, type, content })
         .returning({ id: jenMemory.id });
@@ -100,12 +144,10 @@ export function createNeonDrizzleClient(): NeonMemoryClient {
     },
 
     async recent({ tenantId, project, limit }) {
-      const rows = await db
+      const rows = await database()
         .select()
         .from(jenMemory)
-        .where(
-          and(eq(jenMemory.tenantId, tenantId), eq(jenMemory.project, project)),
-        )
+        .where(and(tenantScope(tenantId), eq(jenMemory.project, project)))
         .orderBy(desc(jenMemory.createdAt))
         .limit(limit);
       return rows.map(toRow);
@@ -125,10 +167,16 @@ function toRow(row: typeof jenMemory.$inferSelect): JenMemoryRow {
 }
 
 export interface NeonMemoryOptions {
-  tenantId: number;
+  /**
+   * Tenant scope. A number scopes to that tenant (the product always sets it);
+   * `null`/omitted means the harness/global scope (`tenant_id IS NULL`).
+   */
+  tenantId?: TenantId;
   project?: string;
   /** Injectable for tests; defaults to the Drizzle-backed client. */
   client?: NeonMemoryClient;
+  /** Standalone-harness connection string (used only when `client` is absent). */
+  databaseUrl?: string;
 }
 
 function toRef(row: JenMemoryRow): MemRef {
@@ -145,7 +193,10 @@ function toRef(row: JenMemoryRow): MemRef {
 export function createNeonMemoryProvider(
   options: NeonMemoryOptions,
 ): MemoryProvider {
-  const client = options.client ?? createNeonDrizzleClient();
+  const tenantId: TenantId = options.tenantId ?? null;
+  const client =
+    options.client ??
+    createNeonDrizzleClient({ databaseUrl: options.databaseUrl });
   const project = options.project ?? NEON_DEFAULT_PROJECT;
 
   return {
@@ -154,7 +205,7 @@ export function createNeonMemoryProvider(
     async search(query: string, opts?: MemorySearchOptions): Promise<MemRef[]> {
       try {
         const rows = await client.search({
-          tenantId: options.tenantId,
+          tenantId,
           project: opts?.project ?? project,
           query,
           limit: opts?.limit ?? 5,
@@ -168,7 +219,7 @@ export function createNeonMemoryProvider(
     async get(id: string): Promise<string> {
       try {
         const row = await client.get({
-          tenantId: options.tenantId,
+          tenantId,
           project,
           id,
         });
@@ -181,7 +232,7 @@ export function createNeonMemoryProvider(
     async save(input: MemorySaveInput): Promise<string> {
       try {
         return await client.save({
-          tenantId: options.tenantId,
+          tenantId,
           project,
           title: input.title,
           topicKey: input.topicKey,
@@ -196,7 +247,7 @@ export function createNeonMemoryProvider(
     async context(opts?: MemoryContextOptions): Promise<string> {
       try {
         const rows = await client.recent({
-          tenantId: options.tenantId,
+          tenantId,
           project: opts?.project ?? project,
           limit: RECENT_LIMIT,
         });

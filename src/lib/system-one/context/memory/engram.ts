@@ -35,6 +35,12 @@ export interface EngramMemoryOptions {
   /** Session id used when saving; auto-derived from the project when omitted. */
   sessionId?: string;
   timeoutMs?: number;
+  /**
+   * Provider label. The transport is identical for every Engram endpoint; the
+   * label lets the registry distinguish the local server (`engram`) from the
+   * remote cloud server (`cloud`). Defaults to `engram`.
+   */
+  name?: string;
   /** Injectable for tests; defaults to global fetch. */
   fetchFn?: typeof fetch;
 }
@@ -87,7 +93,7 @@ export function createEngramMemoryProvider(
   }
 
   return {
-    name: "engram",
+    name: options.name ?? "engram",
 
     async search(query: string, opts?: MemorySearchOptions): Promise<MemRef[]> {
       const params = new URLSearchParams({ q: query });
