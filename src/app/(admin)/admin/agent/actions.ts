@@ -7,13 +7,18 @@ import { revalidatePath } from "next/cache";
 import { requireTenantId, invalidateAgentConfigCache } from "@/lib/tenants";
 import { invalidateAIConfigCache } from "@/lib/ai/config";
 import { encrypt, decryptIfEncrypted } from "@/lib/encryption";
+import { invalidateDecisionConfigCache } from "@/lib/system-one/config";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 export type AgentConfigData = typeof agentConfig.$inferSelect;
 export type AgentConfigInput = typeof agentConfig.$inferInsert;
 
-const SECRET_KEYS = ["aiApiKey", "telegramBotToken"] as const;
+const SECRET_KEYS = [
+  "aiApiKey",
+  "telegramBotToken",
+  "decisionApiKey",
+] as const;
 
 function maskSecrets(config: AgentConfigData | null): AgentConfigData | null {
   if (!config) return config;
@@ -80,6 +85,7 @@ export async function saveConfigAction(
 
     invalidateAgentConfigCache(tenantId);
     invalidateAIConfigCache(tenantId);
+    invalidateDecisionConfigCache(tenantId);
     revalidatePath("/admin/agent");
     return { success: true };
   } catch (err) {
