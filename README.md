@@ -68,6 +68,17 @@ webhook (ycloud | meta | chatwoot)
 | [`docs/presentations/`](docs/presentations/) | Self-contained HTML decks — open in a browser, no server needed |
 | [`AGENTS.md`](AGENTS.md) | Rules any AI/human agent must follow in this repo |
 
+## Marketing assets
+
+Code-generated visuals for promoting the base — no design tools, no Formosa.dev brand assets. Everything lives in [`marketing/`](marketing/):
+
+| Asset | What it is | Regenerate |
+|---|---|---|
+| [`marketing/carousel/`](marketing/carousel/) | 7-slide Instagram carousel (1080×1350), warm editorial style; PNGs in `carousel/png/` | `cd marketing && npm i && npm run export:carousel` |
+| [`marketing/video/story-whatsapp-agent-base/`](marketing/video/story-whatsapp-agent-base/) | HyperFrames story (1080×1920, 20s), WhatsApp-green accent; MP4 in `renders/` | `cd marketing/video/story-whatsapp-agent-base && npm run render` |
+
+See [`marketing/README.md`](marketing/README.md) for details.
+
 ## Build your product on top
 
 The base is intentionally generic. To ship a vertical product (pizzeria, clinic, store):
