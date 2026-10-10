@@ -1,0 +1,16 @@
+{
+  "name": "jev-harness-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional stdio MCP server exposing the JEV decision packs as tools. Node built-ins only.",
+  "bin": {
+    "jev-harness-mcp": "server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
