@@ -1,12 +1,39 @@
 import "dotenv/config";
 
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { users, agentConfig, products } from "@/db/schema";
+import { tenants, users, agentConfig, products } from "@/db/schema";
 
 async function seed() {
+  // ── Default Tenant ────────────────────────────────────────────────────────
+
+  const defaultSlug = process.env.DEFAULT_TENANT_SLUG ?? "default";
+
+  let [tenant] = await db
+    .select()
+    .from(tenants)
+    .where(eq(tenants.slug, defaultSlug))
+    .limit(1);
+
+  if (!tenant) {
+    [tenant] = await db
+      .insert(tenants)
+      .values({
+        slug: defaultSlug,
+        name: process.env.DEFAULT_TENANT_NAME ?? "Default Business",
+        status: "active",
+      })
+      .returning();
+
+    console.log("Tenant created: %s (id=%d)", tenant.slug, tenant.id);
+  } else {
+    console.log("Tenant already exists: %s (id=%d)", tenant.slug, tenant.id);
+  }
+
+  const tenantId = tenant.id;
+
   // ── Admin User ────────────────────────────────────────────────────────────
 
   const adminEmail = "admin@example.com";
@@ -21,13 +48,14 @@ async function seed() {
   }
 
   const existingAdmin = await db.query.users.findFirst({
-    where: eq(users.email, adminEmail),
+    where: and(eq(users.email, adminEmail), eq(users.tenantId, tenantId)),
   });
 
   if (!existingAdmin) {
     const hashedPassword = bcrypt.hashSync(adminPassword, 10);
 
     await db.insert(users).values({
+      tenantId,
       email: adminEmail,
       hashedPassword,
       name: "Admin",
@@ -41,10 +69,15 @@ async function seed() {
 
   // ── Agent Config ──────────────────────────────────────────────────────────
 
-  const existingConfig = await db.query.agentConfig.findFirst();
+  const existingConfig = await db
+    .select({ id: agentConfig.id })
+    .from(agentConfig)
+    .where(eq(agentConfig.tenantId, tenantId))
+    .limit(1);
 
-  if (!existingConfig) {
+  if (existingConfig.length === 0) {
     await db.insert(agentConfig).values({
+      tenantId,
       enabled: false,
     });
 
@@ -55,11 +88,16 @@ async function seed() {
 
   // ── Sample Products ───────────────────────────────────────────────────────
 
-  const existingProducts = await db.select().from(products).limit(1);
+  const existingProducts = await db
+    .select({ id: products.id })
+    .from(products)
+    .where(eq(products.tenantId, tenantId))
+    .limit(1);
 
   if (existingProducts.length === 0) {
     const sampleProducts = [
       {
+        tenantId,
         name: "Product A",
         description: "Standard product offering with full features.",
         price: "99.99",
@@ -68,6 +106,7 @@ async function seed() {
         sortOrder: 1,
       },
       {
+        tenantId,
         name: "Service Basic",
         description: "Entry-level service package.",
         price: "49.99",
@@ -76,6 +115,7 @@ async function seed() {
         sortOrder: 2,
       },
       {
+        tenantId,
         name: "Product B",
         description: "Premium product with extended warranty.",
         price: "199.99",
@@ -84,6 +124,7 @@ async function seed() {
         sortOrder: 3,
       },
       {
+        tenantId,
         name: "Service Pro",
         description: "Full-service package with priority support.",
         price: "149.99",
@@ -92,6 +133,7 @@ async function seed() {
         sortOrder: 4,
       },
       {
+        tenantId,
         name: "Add-on Module X",
         description: "Supplementary module for existing products.",
         price: "29.99",
@@ -100,6 +142,7 @@ async function seed() {
         sortOrder: 5,
       },
       {
+        tenantId,
         name: "Enterprise Bundle",
         description: "All-in-one bundle for enterprise clients.",
         price: "499.99",
@@ -108,6 +151,7 @@ async function seed() {
         sortOrder: 6,
       },
       {
+        tenantId,
         name: "Consulting Hour",
         description: "One hour of expert consulting.",
         price: "120.00",
