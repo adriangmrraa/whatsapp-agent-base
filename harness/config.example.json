@@ -1,0 +1,48 @@
+{
+  "$comment": "JEV harness configuration. Copy to harness/config.json and edit. The MCP server reads `provider`, `memory`, and `packs`; the `env` block documents environment variables (put those in .env.local — secrets never belong in this file).",
+  "env": {
+    "$comment": "Reference for the environment. Read from the process env, not from this JSON.",
+    "JEV_API_KEY": "<your TypeSafe / Jev key>",
+    "TYPESAFE_API_KEY": "<alias accepted for JEV_API_KEY>",
+    "OPENAI_API_KEY": "<only when provider.engine = openai-decisions>",
+    "DECISION_ENGINE": "jev",
+    "JEV_MEMORY": "engram",
+    "JEV_MEMORY_PROJECT": "whatsapp-business-base",
+    "ENGRAM_HTTP_URL": "http://127.0.0.1:7437",
+    "ENGRAM_HTTP_TOKEN": "<optional; only if your Engram requires a token>"
+  },
+  "provider": {
+    "engine": "jev",
+    "model": "jev-latest",
+    "baseUrl": "https://api.typesafe.ai",
+    "apiKeyEnv": "JEV_API_KEY",
+    "timeoutMs": 8000
+  },
+  "memory": {
+    "$comment": "Memory is advisory context for the in-repo ContextPrimer. engram | neon | none.",
+    "backend": "engram",
+    "project": "whatsapp-business-base"
+  },
+  "defaults": {
+    "$comment": "Adoption is shadow-first (plan §7): run packs, log decisions, change nothing until the ledger proves value. Thresholds below are UNCALIBRATED starting points.",
+    "shadow": true,
+    "failPosture": "open",
+    "budgetTokens": 8000
+  },
+  "packs": {
+    "$comment": "Per-pack enable flag and threshold override. Omit a pack to use its built-in default.",
+    "context-prime": { "enabled": true, "threshold": 0.5 },
+    "file-scope": { "enabled": true, "threshold": 0.5 },
+    "skill-route": { "enabled": true, "threshold": 0.4 },
+    "workload-forecast": { "enabled": true, "threshold": 3 },
+    "ambiguity": { "enabled": true, "threshold": 0.5 },
+    "scope-guard": { "enabled": true, "threshold": 0.5 },
+    "test-impact": { "enabled": true, "threshold": 0.4 },
+    "triage": { "enabled": true, "threshold": 0.5 },
+    "acceptance": { "enabled": true, "threshold": 0.5 },
+    "blast-radius": { "enabled": true, "threshold": 3 },
+    "review": { "enabled": true, "threshold": 0.5 },
+    "verify": { "enabled": true, "threshold": 0.5 },
+    "guard": { "enabled": true, "threshold": 0.5 }
+  }
+}
