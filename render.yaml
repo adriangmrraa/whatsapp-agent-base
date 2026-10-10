@@ -1,0 +1,51 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy the base on Render. The default database in onboarding is Neon: set
+# DATABASE_URL to your Neon pooled connection string (sync: false) instead of
+# the fromDatabase block below. The fromDatabase block is provided for a
+# Render-managed Postgres first deploy.
+#
+# Migrations run in the build so schema is current before the service starts.
+
+services:
+  - type: web
+    runtime: node
+    name: whatsapp-agent-base
+    plan: starter
+    buildCommand: npm ci && npm run db:migrate && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: DEFAULT_TENANT_SLUG
+        value: default
+      - key: AI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: AI_MODEL
+        value: gpt-5-mini
+      - key: EMBEDDING_BASE_URL
+        value: https://api.openai.com/v1
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: EMBEDDING_DIMENSIONS
+        value: "1536"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+
+databases:
+  - name: whatsapp-agent-db
+    databaseName: whatsapp_agent
+    plan: basic-256mb
