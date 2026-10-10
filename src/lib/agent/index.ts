@@ -3,6 +3,7 @@ import { buildSystemPrompt, loadConfig, loadCatalog } from "./system-prompt";
 import { buildAgentTools } from "./tools";
 import { getMainChatModel } from "@/lib/ai/config";
 import { retrieveKnowledge } from "@/lib/embeddings";
+import { decideForTurn } from "@/lib/system-one";
 import type { ModelMessage } from "ai";
 import logger from "@/lib/logger";
 
@@ -39,6 +40,20 @@ export async function processMessage({
     // top-k chunks into the prompt. Best-effort — empty context on failure.
     const knowledge = await retrieveKnowledge({ tenantId, query: text });
 
+    // System One (Jev): deterministic decision consulted BEFORE the LLM. A
+    // gate that disallows the turn suppresses the toolset (the model still
+    // answers, without acting) — the customer handoff path is owned upstream
+    // by the session policy.
+    const decision = await decideForTurn({
+      tenantId,
+      surface: "customer",
+      text,
+    });
+    logger.debug(
+      { tenantId, decision: decision.choice ?? decision.kind, reason: decision.reason },
+      "[agent] system-one decision",
+    );
+
     const basePrompt = buildSystemPrompt(businessName, catalog, config);
     const systemPrompt = knowledge.context
       ? `${basePrompt}\n\n${knowledge.context}`
@@ -53,7 +68,7 @@ export async function processMessage({
       model,
       system: systemPrompt,
       messages,
-      tools: buildAgentTools(tenantId, phoneNumber),
+      tools: decision.allow === false ? undefined : buildAgentTools(tenantId, phoneNumber),
       stopWhen: stepCountIs(3),
     });
 
