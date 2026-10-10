@@ -15,6 +15,13 @@
       "when": 1791618684256,
       "tag": "0001_marvelous_randall",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791633190609,
+      "tag": "0002_knowledge_chunks",
+      "breakpoints": true
     }
   ]
 }

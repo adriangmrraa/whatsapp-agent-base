@@ -16,6 +16,8 @@ The code lives locally *and* on GitHub — clone it, fork it, or use it as a tem
 | **Multi-tenant core** | `tenant_id` on every business row; resolution via `channels` (provider + external id) for inbound, session `tenantId` for admin |
 | **Provider-agnostic messaging** | `MessagingProvider` interface → adapters for **YCloud**, **Meta Cloud API**, **Chatwoot**; add yours in ~150 lines |
 | **Provider-agnostic AI** | Any OpenAI-compatible endpoint per tenant (OpenAI, OpenRouter, DeepSeek, Groq, Together, Ollama) |
+| **Vector memory** | Tenant-scoped semantic knowledge store on **pgvector** — ingest chunk+embed docs, retrieve top-k before `generateText`. Swappable embedding provider (default OpenAI `text-embedding-3-small`) |
+| **Agent platform seams** | A provider-neutral capability registry (surface + role gating, Realtime/Chat projections), a deterministic **System One** decision layer (Jev rules today, Laya swappable), and internal **voice-agent** (OpenAI Realtime) interfaces — one engine, two agents |
 | **Durable session engine** | Per-conversation state machine (commercial / personal_acknowledged / handed_off) with compare-and-swap + idempotent side effects — survives restarts, suppresses duplicate webhooks, avoids unnecessary LLM calls |
 | **Human handoff** | Agent or human can claim a conversation; `human_override` window silences the AI; Chatwoot inbox bridging included |
 | **Security** | AES-256 encrypted credentials, per-tenant webhook signature verification, fail-closed dedup/CAS, rate limiting, secret redaction in logs |
@@ -76,6 +78,9 @@ webhook (ycloud | meta | chatwoot)
 | [`docs/multi-tenancy.md`](docs/multi-tenancy.md) | Tenant model, resolution, isolation rules |
 | [`docs/providers.md`](docs/providers.md) | YCloud / Meta / Chatwoot setup + how to add a provider |
 | [`docs/ai-engine.md`](docs/ai-engine.md) | Agent tools, session policy, buffer, queue |
+| [`docs/embeddings.md`](docs/embeddings.md) | Vector memory: pgvector store, ingest, retrieval, agent wiring |
+| [`docs/agent-platform.md`](docs/agent-platform.md) | One engine, two agents: capabilities, System One (Jev), voice, storefront |
+| [`docs/channels-meta.md`](docs/channels-meta.md) | Instagram + Facebook (Meta Graph API) — design + adapter checklist |
 | [`docs/security.md`](docs/security.md) | Threat model, credentials, fail-closed rules |
 | [`docs/deployment.md`](docs/deployment.md) | Production checklist, cron, env reference |
 | [`docs/for-ai-agents.md`](docs/for-ai-agents.md) | **Guide for AI coding agents** — how to explore, what context to ask for, harness requirements |
@@ -104,6 +109,20 @@ The base is intentionally generic. To ship a vertical product (pizzeria, clinic,
 5. Keep every query tenant-scoped — see [`AGENTS.md`](AGENTS.md) for the isolation rules.
 
 See [`docs/for-ai-agents.md`](docs/for-ai-agents.md) if you're driving this repo with a coding agent.
+
+## Roadmap
+
+One engine (tools + data + tenant + deterministic decisions + vector memory)
+feeding two agents — a customer agent on connected channels and an internal
+staff agent. Planned items are in parentheses; shipped items are not.
+
+- Tenant-scoped vector memory on pgvector (embedding provider + store abstraction, ingest, retrieval, agent wiring)
+- Agent-platform seams — capability registry, System One decision layer (Jev rules / Laya swappable), internal voice-agent (OpenAI Realtime) interfaces
+- Deploy docs for local / VPS / Render with Neon as the default database
+- (Hosted Jev/Laya decision provider behind `DecisionLayer`)
+- (Internal voice agent runtime — Realtime session, audio, tool-call bridge)
+- (Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order)
+- (Instagram + Facebook channels via Meta Graph API)
 
 ## Verification
 

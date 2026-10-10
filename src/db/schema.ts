@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   index,
+  vector,
 } from "drizzle-orm/pg-core";
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -473,6 +474,12 @@ export const agentConfig = pgTable(
     aiModelFast: varchar("ai_model_fast", { length: 100 }),
     aiModelVision: varchar("ai_model_vision", { length: 100 }),
 
+    // ─── Embeddings / vector memory (agnostic — any OpenAI-compatible) ───
+    embeddingApiKey: text("embedding_api_key"),
+    embeddingBaseUrl: varchar("embedding_base_url", { length: 255 }),
+    embeddingModel: varchar("embedding_model", { length: 100 }),
+    embeddingDimensions: integer("embedding_dimensions"),
+
     // ─── Business Operations ────────────────────────────────────────────
     operatingHours: text("operating_hours"),
     deliveryEnabled: boolean("delivery_enabled").notNull().default(true),
@@ -700,5 +707,54 @@ export const promotions = pgTable(
   },
   (table) => ({
     tenantIdx: index("idx_promotions_tenant").on(table.tenantId),
+  }),
+);
+
+// ─── Knowledge / vector memory (tenant-scoped semantic store) ────────────────
+//
+// One row = one embedded chunk of a tenant document. The embedding dimension
+// is fixed by the column type (default text-embedding-3-small → 1536); changing
+// the model to a different dimension requires a migration. Every query filters
+// `tenant_id` — the isolation boundary. Re-ingesting identical content is a
+// no-op thanks to the (tenant, document_key, content_hash) unique index.
+
+export const knowledgeChunks = pgTable(
+  "knowledge_chunks",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    /** Logical document identity, e.g. "faq/shipping" or "policy/refunds". */
+    documentKey: varchar("document_key", { length: 255 }).notNull(),
+    /** Knowledge origin: manual | catalog | policy | faq | custom. */
+    source: varchar("source", { length: 100 }).notNull(),
+    title: varchar("title", { length: 255 }),
+    content: text("content").notNull(),
+    /** sha256(content) — idempotent re-ingest key. */
+    contentHash: varchar("content_hash", { length: 64 }).notNull(),
+    chunkIndex: integer("chunk_index").notNull().default(0),
+    tokenCount: integer("token_count"),
+    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+    embeddingModel: varchar("embedding_model", { length: 100 }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    tenantDocHashUq: uniqueIndex("idx_knowledge_chunks_tenant_doc_hash").on(
+      table.tenantId,
+      table.documentKey,
+      table.contentHash,
+    ),
+    tenantIdx: index("idx_knowledge_chunks_tenant").on(table.tenantId),
+    embeddingIdx: index("idx_knowledge_chunks_embedding").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
   }),
 );
