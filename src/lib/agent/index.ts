@@ -3,6 +3,7 @@ import { buildSystemPrompt, loadConfig, loadCatalog } from "./system-prompt";
 import { buildAgentTools } from "./tools";
 import { getMainChatModel } from "@/lib/ai/config";
 import { retrieveKnowledge } from "@/lib/embeddings";
+import { buildWebOrderContext } from "@/lib/storefront/context";
 import { decideForTurn } from "@/lib/system-one";
 import type { ModelMessage } from "ai";
 import logger from "@/lib/logger";
@@ -40,6 +41,10 @@ export async function processMessage({
     // top-k chunks into the prompt. Best-effort — empty context on failure.
     const knowledge = await retrieveKnowledge({ tenantId, query: text });
 
+    // Pre-agent capture: if the message carries a WEB:<ref>, inject the exact
+    // structured order so the model confirms it instead of re-parsing free text.
+    const webOrderContext = await buildWebOrderContext(tenantId, text);
+
     // System One (Jev): deterministic decision consulted BEFORE the LLM. A
     // gate that disallows the turn suppresses the toolset (the model still
     // answers, without acting) — the customer handoff path is owned upstream
@@ -55,9 +60,9 @@ export async function processMessage({
     );
 
     const basePrompt = buildSystemPrompt(businessName, catalog, config);
-    const systemPrompt = knowledge.context
-      ? `${basePrompt}\n\n${knowledge.context}`
-      : basePrompt;
+    const systemPrompt = [basePrompt, knowledge.context, webOrderContext]
+      .filter((part): part is string => Boolean(part))
+      .join("\n\n");
 
     const messages: ModelMessage[] = [
       ...conversationHistory,

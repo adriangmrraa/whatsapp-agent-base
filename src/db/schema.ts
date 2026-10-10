@@ -516,6 +516,21 @@ export const agentConfig = pgTable(
     metaWabaId: varchar("meta_waba_id", { length: 50 }),
     metaConnected: boolean("meta_connected").notNull().default(false),
 
+    // ─── Storefront / public catalog (tenant-scoped business identity) ──
+    // One deployment renders its public storefront from these fields — no
+    // per-vertical hardcoding.
+    storefrontTagline: varchar("storefront_tagline", { length: 255 }),
+    storefrontDescription: text("storefront_description"),
+    storefrontAddress: text("storefront_address"),
+    storefrontInstagram: varchar("storefront_instagram", { length: 255 }),
+    storefrontWebsite: varchar("storefront_website", { length: 255 }),
+    /** Send first-contact customers to the web ordering flow. */
+    webOrderRedirectEnabled: boolean("web_order_redirect_enabled")
+      .notNull()
+      .default(false),
+    /** Public WhatsApp number used to hand a structured order to the agent. */
+    webOrderWhatsappNumber: varchar("web_order_whatsapp_number", { length: 50 }),
+
     // ─── Chatwoot ───────────────────────────────────────────────────────
     chatwootEnabled: boolean("chatwoot_enabled").notNull().default(false),
     chatwootBaseUrl: varchar("chatwoot_base_url", { length: 255 }),
@@ -598,9 +613,26 @@ export const orders = pgTable(
       .defaultNow(),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     followupSent: boolean("followup_sent").notNull().default(false),
+    /** ─── Structured web-order capture (storefront checkout) ──────────── */
+    /** Client-supplied idempotency key; one order per (tenant, requestId). */
+    requestId: varchar("request_id", { length: 64 }),
+    /** WEB:<uuid> reference handed back to the agent for confirmation. */
+    webRef: varchar("web_ref", { length: 64 }),
+    /** Server-computed total (client prices are never trusted). */
+    total: numeric("total", { precision: 10, scale: 2 }),
+    /** Origin of the order: whatsapp | web. */
+    source: varchar("source", { length: 20 }).notNull().default("whatsapp"),
   },
   (table) => ({
     tenantIdx: index("idx_orders_tenant").on(table.tenantId),
+    requestUq: uniqueIndex("idx_orders_tenant_request").on(
+      table.tenantId,
+      table.requestId,
+    ),
+    webRefIdx: index("idx_orders_tenant_webref").on(
+      table.tenantId,
+      table.webRef,
+    ),
   }),
 );
 

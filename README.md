@@ -121,7 +121,7 @@ staff agent. Planned items are in parentheses; shipped items are not.
 - Deploy docs for local / VPS / Render with Neon as the default database
 - (Hosted Jev/Laya decision provider behind `DecisionLayer`)
 - Internal voice agent runtime — Realtime session, audio, tool-call bridge
-- (Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order)
+- Storefront + pre-agent order capture: admin-loaded catalog → public landing + digital menu → structured checkout → agent confirms the structured order
 - (Instagram + Facebook channels via Meta Graph API)
 
 ## Verification

@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { orders } from "@/db/schema";
 import { retrieveKnowledge } from "@/lib/embeddings";
+import { getStructuredOrderByReference } from "@/lib/storefront/context";
 import type {
   AgentSurface,
   CapabilityContext,
@@ -93,7 +94,36 @@ const listPendingOrders: CapabilityDescriptor = {
   },
 };
 
-const CAPABILITIES: CapabilityDescriptor[] = [searchKnowledge, listPendingOrders];
+const getStructuredOrder: CapabilityDescriptor = {
+  name: "getStructuredOrder",
+  description:
+    "Retrieve a structured order captured from the public storefront by its WEB:<reference>, so the agent confirms the exact items, total and address instead of re-parsing free text.",
+  parameters: {
+    type: "object",
+    properties: {
+      reference: {
+        type: "string",
+        description: "The WEB:<reference> token from the customer's message.",
+      },
+    },
+    required: ["reference"],
+    additionalProperties: false,
+  },
+  surfaces: ["customer", "internal"],
+  async execute(ctx, args): Promise<CapabilityResult> {
+    const reference = String(args.reference ?? "").trim();
+    if (!reference) return { found: false };
+    const order = await getStructuredOrderByReference(ctx.tenantId, reference);
+    if (!order) return { found: false, reference };
+    return { found: true, order };
+  },
+};
+
+const CAPABILITIES: CapabilityDescriptor[] = [
+  searchKnowledge,
+  listPendingOrders,
+  getStructuredOrder,
+];
 
 /** Capabilities available to a given context (surface + role gating). */
 export function selectCapabilities(ctx: CapabilityContext): CapabilityDescriptor[] {
