@@ -489,10 +489,21 @@ review between units.
 
 ## 12. Execution & delegation policy (multi-agent, waves)
 
-### 12.1 Memory provider — Engram local OR pluggable
+### 12.1 Memory provider — Engram, with two storage backends
 
-Memory is abstracted behind one interface so the harness runs with or without a
-local Engram binary (Engram is Go + MCP; we do not embed it):
+The memory layer **IS Engram**: one interface, and the only choice is **where the
+memories are stored**. There are **two options** (env `JEV_MEMORY`):
+
+1. `engram` — **local Engram** (default). Talks to the local Engram server
+   (`engram serve`, `127.0.0.1:7437`). `search` returns 300-char previews → always
+   `get` for the full content.
+2. `neon` — **Engram with the memories hosted in Neon** (the app's own Postgres).
+   Same interface/semantics, tenant-scoped `jen_memory` table (`tenant_id` +
+   `project`). For machines/deployments with no local Engram.
+
+`none` is **not a third option** — it is the fail-soft degraded fallback (stateless),
+used only when neither backend is configured/reachable; memory is advisory and must
+never block a decision.
 
 ```ts
 interface MemoryProvider {
@@ -503,15 +514,11 @@ interface MemoryProvider {
 }
 ```
 
-Implementations (selected by env `JEV_MEMORY=engram|neon|none`):
-
-- `engram` — local Engram CLI/MCP (default in dev). `mem_search` returns 300-char
-  previews → always `mem_get_observation` for full content.
-- `neon` — a portable `jen_memory` table on the app's own Postgres (Neon), scoped by
-  `tenant_id` + `project`. For deployments with no Engram. (Also usable to mirror.)
-- `none` — no memory; decisions are stateless.
-
-The `ContextPrimer` (§2) talks only to this interface, so switching backends is env-only.
+Both backends expose the identical interface, so the `ContextPrimer` (§2) and every
+pack are backend-agnostic — switching is env-only. **Shipped by the foundation:**
+`src/lib/system-one/context/memory/{engram,neon,none,registry}.ts` (+ `jenMemory`
+table, migration `0005`). Note: the `neon` option requires a `tenantId` (isolation
+law); with none it degrades to `none` rather than running an unscoped query.
 
 ### 12.2 Test gate — mandatory, automatic, before every commit
 
