@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# jev hooks runtime state (stop-attempt counter)
+.jev-hooks/

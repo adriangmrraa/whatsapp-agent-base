@@ -1,0 +1,30 @@
+{
+  "$comment": "JEV lifecycle hooks for Claude Code. Merge this `hooks` block into .claude/settings.json (project) or ~/.claude/settings.json (user). Exec form runs node directly (node.exe is a real binary on every platform); ${CLAUDE_PROJECT_DIR} resolves to the repo root. The guard/verify packs are the same ones the MCP server exposes.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/harness/hooks/gate-pretool.mjs"],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/harness/hooks/stop-done.mjs"],
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}
