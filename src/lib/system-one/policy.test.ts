@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  bandsOf,
   choiceMargin,
+  DEFAULT_BANDS,
   noulThreshold,
   POLICY,
   PolicyError,
@@ -101,4 +103,23 @@ test("policy: PolicyError carries label, key and kind", () => {
   assert.equal(error.key, "injection");
   assert.equal(error.kind, "score");
   assert.match(error.message, /guard/);
+});
+
+test("policy: default bands are 0.9 auto / 0.5 flag", () => {
+  assert.deepEqual(DEFAULT_BANDS, { auto: 0.9, flag: 0.5 });
+  assert.deepEqual(bandsOf("guard"), { auto: 0.9, flag: 0.5 });
+});
+
+test("policy: every registered label inherits the default bands", () => {
+  for (const label of [...policyLabels(), "not-a-real-label"]) {
+    assert.deepEqual(bandsOf(label), DEFAULT_BANDS, `bands mismatch for "${label}"`);
+  }
+});
+
+test("policy: bands are ordered (auto >= flag >= 0)", () => {
+  for (const label of policyLabels()) {
+    const { auto, flag } = bandsOf(label);
+    assert.ok(auto >= flag, `${label}: auto ${auto} < flag ${flag}`);
+    assert.ok(flag >= 0, `${label}: flag ${flag} < 0`);
+  }
 });

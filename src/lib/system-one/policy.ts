@@ -28,6 +28,30 @@ export type FailPosture = "open" | "closed";
 /** The three JEV primitives. The kind selects the threshold's meaning. */
 export type ThresholdKind = "noul" | "choice" | "score";
 
+/**
+ * Confidence/score bands shared by the lifecycle hooks (Stop DONE, guard ask).
+ * `auto` is the level at which an outcome is accepted outright; `flag` is the
+ * level at which it is accepted but surfaced for review. Below `flag` the
+ * outcome is refused. Bands are DEFAULTED per label and overridable — a
+ * calibratable starting point, not a tuned value (plan §7/§10).
+ */
+export interface Bands {
+  /** At/above this confidence the outcome is auto-accepted. Default 0.9. */
+  auto: number;
+  /** At/above this (and below `auto`) the outcome is accepted but flagged. Default 0.5. */
+  flag: number;
+}
+
+/** The default bands every label inherits until calibrated (0.9 auto / 0.5 flag). */
+export const DEFAULT_BANDS: Bands = Object.freeze({ auto: 0.9, flag: 0.5 });
+
+/**
+ * Per-label band overrides. Empty by default — every label inherits
+ * `DEFAULT_BANDS`. Calibrate a single label here without touching any pack.
+ */
+export const BAND_OVERRIDES: Readonly<Record<string, Partial<Bands>>> =
+  Object.freeze({});
+
 export interface LabelPolicy {
   posture: FailPosture;
   /** ABSOLUTE probability-of-yes cutoffs (noul), each in [0, 1]. */
@@ -190,4 +214,17 @@ export function choiceMargin(label: string, key: string): number {
 /** Ordered-rubric score index. Throws when unregistered. */
 export function scoreThreshold(label: string, key: string): number {
   return lookup(label, key, "score");
+}
+
+/**
+ * The bands for a label: `DEFAULT_BANDS` ({auto: 0.9, flag: 0.5}) merged with
+ * any `BAND_OVERRIDES[label]`. Unlike the kind thresholds, bands never throw —
+ * they are defaults every label may use, and an unregistered label simply gets
+ * the defaults. The returned `auto` is guaranteed >= `flag`.
+ */
+export function bandsOf(label: string): Bands {
+  const override = BAND_OVERRIDES[label];
+  const auto = Math.max(override?.auto ?? DEFAULT_BANDS.auto, 0);
+  const flag = Math.max(override?.flag ?? DEFAULT_BANDS.flag, 0);
+  return { auto, flag: Math.min(flag, auto) };
 }
