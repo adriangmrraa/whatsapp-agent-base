@@ -59,7 +59,7 @@ jev_acceptance      { state }                       → choice `status` + noul `
 jev_blast_radius    { state }                       → score `risk`
 jev_review          { state }                       → score `correctness|spec_fit|test_gap|radius` + noul `block`
 jev_verify          { state }                       → noul `claims_evidenced` + choice `verdict`
-jev_guard           { state }                       → noul `destructive|injection|secret_exposure` [closed]
+jev_guard           { state }                       → hard rules in code + choice `risk` + noul hazards [closed]
 jev_decide          { state, questions }            → raw contract escape hatch
 ```
 
@@ -86,7 +86,7 @@ catalog mirror those packs; keep them in sync.
 | `blast-radius` | regression risk of the change | score | open | `sdd-verify`, pre-merge |
 | `review` | diff rubric (correctness/spec/test-gap/radius) | score ×N + noul | open | pre-merge review |
 | `verify` | claims backed by evidence? | noul + choice | open (advisory) | `sdd-verify` |
-| `guard` | destructive / injection / secret-exposure? | noul ×N | **closed** | before any tool result enters context or any mutation |
+| `guard` | destructive / injection / secret-exposure? | hard rules in code + `choice` (`risk`) + noul hazards | **closed** | before any tool result enters context or any mutation |
 
 Guard lines `sdd-tasks` must emit verbatim (from `workload-forecast`):
 `Decision needed before apply` (when `needs_decision` is high) and

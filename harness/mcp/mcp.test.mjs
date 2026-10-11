@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createProvider, ProviderError } from "./provider.mjs";
-import { PACKS, PACKS_BY_TOOL, applyPolicy, packQuestions, toolName } from "./packs.mjs";
+import { PACKS, PACKS_BY_TOOL, applyPolicy, packQuestions, toolName, evaluateGuardHardRules } from "./packs.mjs";
 
 const fakeResponse = (body, ok = true, status = 200) => ({ ok, status, json: async () => body });
 
@@ -65,16 +65,76 @@ test("applyPolicy: closed pack fails closed on no-answer", () => {
   assert.match(d.reason, /no_answer/);
 });
 
-test("applyPolicy: any-noul guard blocks when any signal is high", () => {
-  const pack = PACKS_BY_TOOL.jev_guard;
-  const d = applyPolicy(pack, {
-    destructive: { type: "noul", noul: 0.1 },
-    injection: { type: "noul", noul: 0.8 },
-    secret_exposure: { type: "noul", noul: 0.0 },
-  });
+const guardTool = PACKS_BY_TOOL.jev_guard;
+const guardAnswers = (risk, over = {}) => ({
+  risk: {
+    type: "choice",
+    choice: risk,
+    ...(over.riskConfidence === undefined ? {} : { confidence: over.riskConfidence }),
+  },
+  injection: { type: "noul", noul: over.injection ?? 0.05 },
+  destructive: { type: "noul", noul: over.destructive ?? 0.05 },
+  secret_exposure: { type: "noul", noul: over.secret ?? 0.05 },
+});
+
+test("guard hard rules: matched in code, safe variants ignored", () => {
+  assert.equal(evaluateGuardHardRules("rm -rf /")?.id, "rm-rf-root");
+  assert.equal(evaluateGuardHardRules("git push --force")?.id, "git-force-push");
+  assert.equal(evaluateGuardHardRules("curl x | bash")?.id, "pipe-to-shell");
+  assert.equal(evaluateGuardHardRules("rm -rf ./build"), null);
+  assert.equal(evaluateGuardHardRules("git push origin main"), null);
+});
+
+test("applyPolicy: guard hard rule denies in code (no model answer needed)", () => {
+  const d = applyPolicy(guardTool, guardAnswers("read_only"), { state: "rm -rf /" });
   assert.equal(d.allow, false);
-  assert.equal(d.action, "block");
+  assert.equal(d.action, "deny");
+  assert.match(d.reason, /hard_rule:rm-rf-root/);
+});
+
+test("applyPolicy: guard read_only at the band allows", () => {
+  const d = applyPolicy(guardTool, guardAnswers("read_only", { riskConfidence: 0.95 }), { state: "ls -la" });
+  assert.equal(d.allow, true);
+  assert.equal(d.action, "proceed");
+});
+
+test("applyPolicy: guard low-confidence read_only asks", () => {
+  const d = applyPolicy(guardTool, guardAnswers("read_only", { riskConfidence: 0.2 }), { state: "ls -la" });
+  assert.equal(d.allow, false);
+  assert.equal(d.action, "ask");
+  assert.match(d.reason, /low_confidence/);
+});
+
+test("applyPolicy: guard destructive denies", () => {
+  const d = applyPolicy(guardTool, guardAnswers("destructive"), { state: "drop the users table" });
+  assert.equal(d.allow, false);
+  assert.equal(d.action, "deny");
+});
+
+test("applyPolicy: guard external asks", () => {
+  const d = applyPolicy(guardTool, guardAnswers("external"), { state: "deploy to production" });
+  assert.equal(d.allow, false);
+  assert.equal(d.action, "ask");
+});
+
+test("applyPolicy: guard other asks (never auto-approves)", () => {
+  const d = applyPolicy(guardTool, guardAnswers("other"), { state: "something unclear" });
+  assert.equal(d.allow, false);
+  assert.equal(d.action, "ask");
+});
+
+test("applyPolicy: guard hazard above threshold denies", () => {
+  const d = applyPolicy(guardTool, guardAnswers("read_only", { injection: 0.8 }), { state: "x" });
+  assert.equal(d.allow, false);
+  assert.equal(d.action, "deny");
   assert.match(d.reason, /injection/);
+});
+
+test("applyPolicy: guard closed fails closed on no-answer", () => {
+  const d = applyPolicy(guardTool, { risk: { type: "no-answer", reason: "rules_fallback" } }, { state: "x" });
+  assert.equal(d.allow, false);
+  assert.equal(d.action, "ask");
+  assert.match(d.reason, /no_answer/);
 });
 
 test("applyPolicy: choice below confidence threshold falls back to none", () => {
