@@ -60,6 +60,7 @@ src/lib/system-one/
 harness/                 the reusable dev-harness shipped in-repo
 ├── skills/jev-decide/   Agent Skill — when to call each pack
 ├── mcp/                 optional stdio MCP server exposing the packs as tools
+├── hooks/               deterministic lifecycle hooks (gate/stop) + cron-triage
 ├── sdd/                 opt-in SDD wiring (emit block, shadow CLI, patches)
 ├── install.sh           copy the skill into an agent's skills dir
 ├── config.example.json  provider + memory + packs configuration
@@ -260,7 +261,7 @@ active until the [ledger gate](#8-adoption-methodology) promotes it.
 | `review` | diff rubric | `noul` (`blocking`) + `score` (`weakScore`) | open | pre-merge review |
 | `verify` | claims backed by evidence? | `noul` (`evidence`, `matches`) + `choice` (`verdict`) | open (advisory) | `sdd-verify` |
 | `phase-route` | next SDD phase | `choice` (phase) + `noul` (`ready`, `blocked`) | open | orchestrator DAG |
-| `guard` | destructive / injection / secret-exposure? | `noul` (`injection`, `destructive`, `exfiltration`, `irreversible`) | **closed** | before any tool result enters context or any mutation |
+| `guard` | destructive / injection / secret-exposure? | hard rules in code + `choice` (`risk`: read_only/local_edit/destructive/external/other) + `noul` (`injection`, `destructive`, `exfiltration`, `irreversible`) | **closed** | before any tool result enters context or any mutation |
 
 `workload-forecast` emits the exact guard lines the SDD tasks phase matches
 literally: **`Decision needed before apply`** and **`Chained PRs recommended`**.
@@ -536,13 +537,84 @@ Full detail in [`jev-harness-ledger.md`](jev-harness-ledger.md) §4.
 
 ---
 
-## 11. References
+## 11. Jev engineering — the 7 rules
+
+The principles the whole harness obeys. When a design choice is unclear, these
+decide it.
+
+1. **Code owns the workflow and every irreversible action.** Jev only makes a
+   bounded decision (a probability, a pick, a rubric position); it never
+   executes one. Replies, deploys, deletes and payments happen in code, behind
+   a threshold, after a decision.
+2. **Ask the smallest typed question.** `noul` for a yes/no judgment, `choice`
+   for pick-one (always with a `none`/`other` fallback), `score` for an ordered
+   rubric. Several independent labels = several `noul` — never one `choice`
+   stretched to cover them.
+3. **Hard rules live in CODE first.** If a rule can be encoded — a destructive
+   command shape, a force-push, a pipe into a shell — it is checked
+   deterministically *before* any model call. A model can never veto a hard
+   rule, and a provider outage can never wave one through.
+4. **Thresholds and bands live in policy, ship uncalibrated, and fail closed.**
+   `policy.ts` is the one place thresholds live; a missing threshold throws. The
+   defaults (0.9 auto / 0.5 flag) are starting points to tune on labeled data.
+5. **Fail posture is explicit.** `closed` packs protect — no signal ⇒ do not
+   proceed (ask a human). `open` packs advise — no signal ⇒ proceed. Never "log
+   and continue" on a protective gate.
+6. **Never auto-approve the ambiguous.** `other` or a low-confidence
+   classification ⇒ ask; `destructive` ⇒ deny; `external` ⇒ ask. Uncertainty
+   resolves to a human, never to `allow`.
+7. **Measure and remember every decision.** Adoption is shadow-first and
+   ledger-gated, and each decision is persisted to memory — an audit trail today
+   and an eval set for calibration tomorrow.
+
+## 12. Lifecycle hooks & cron
+
+The decision layer is only as good as where it is enforced. `harness/hooks/`
+ships deterministic adapters that call the **same provider and packs as the MCP
+server** (single source of truth), plus a configurable external trigger.
+
+- **PreToolUse GATE (`gate-pretool.mjs`)** — safety. Runs the `guard` pack
+  before a tool: hard rules in code first, then the 5-way risk `choice`
+  (`read_only | local_edit | destructive | external | other`). `destructive` ⇒
+  deny, `external` ⇒ ask, `read_only`/`local_edit` at/above the band ⇒ allow,
+  `other`/low-confidence/no-signal ⇒ ask. **Never auto-approves.** A code-layer
+  deny is authoritative even if the provider is down.
+- **Stop DONE (`stop-done.mjs`)** — autonomy. Runs `checks.sh` in code, then the
+  `verify` pack; bands `≥0.9` stop · `0.5–0.9` stop + `REVIEW.md` · `<0.5` block;
+  a turn-cap in code overrides. The evidence command's exit code is the floor.
+- **cron-triage (`cron-triage/`)** — a **configurable** trigger (interval **and**
+  webhook/event) that uses the `triage` pack to decide whether to *wake* an
+  agent. The cadence is deployment policy and is **never hardcoded**.
+
+### Per-agent hook support
+
+| Agent | Gate (PreToolUse) | Stop check |
+|---|---|---|
+| **Claude Code** | **native** `PreToolUse` hook (`gate-pretool.mjs`) | **native** `Stop` hook (`stop-done.mjs`) |
+| **codex** | plugins / `/hooks` → `gate-pretool.mjs` | run `stop-done.mjs` from cron |
+| **opencode** | **plugin** `tool.execute.before` (`opencode-plugin.mjs`) | `session.idle` is advisory; hard Stop via cron |
+| **cursor** | adapter wrapping the Claude hook contract | via the adapter / cron |
+| **Devin** | MCP/cloud-first — the MCP `jev_guard` tool | cron |
+| **any agent** | (MCP `jev_guard`) | **cron** |
+
+**Cron is an external wrapper, not an agent feature.** No coding agent ships a
+scheduler worth trusting; the timer belongs to the OS (cron, systemd-timer, a
+cloud scheduler) or to an event source (a webhook). That makes it **universal**:
+every agent and every stack can be woken by the same wrapper calling the same
+`triage` decision. See [`../harness/hooks/README.md`](../harness/hooks/README.md)
+and [`../harness/hooks/cron-triage/README.md`](../harness/hooks/cron-triage/README.md).
+
+---
+
+## 13. References
 
 - Plan (design + phases): [`../JEV-HARNESS-PLAN.md`](../JEV-HARNESS-PLAN.md).
 - Ledger + caveats: [`jev-harness-ledger.md`](jev-harness-ledger.md).
 - Onboarding (human + agent): [`../harness/ONBOARDING.md`](../harness/ONBOARDING.md).
 - SDD integration + patches: [`../harness/sdd/integration.md`](../harness/sdd/integration.md).
 - MCP server: [`../harness/mcp/README.md`](../harness/mcp/README.md).
+- Lifecycle hooks: [`../harness/hooks/README.md`](../harness/hooks/README.md).
+- cron-triage trigger: [`../harness/hooks/cron-triage/README.md`](../harness/hooks/cron-triage/README.md).
 - Agent Skill: [`../harness/skills/jev-decide/SKILL.md`](../harness/skills/jev-decide/SKILL.md).
 - TypeSafe (Jev): `docs.typesafe.ai` — the only first-party source.
 - Related docs: [`agent-platform.md`](agent-platform.md) (System One in the
