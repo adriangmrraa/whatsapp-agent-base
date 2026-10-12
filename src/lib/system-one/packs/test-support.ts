@@ -64,8 +64,9 @@ export function runtime(provider: DecisionProvider): PackRuntime {
 }
 
 export const noul = (value: number): Answer => ({ type: "noul", noul: value });
-export const choice = (value: string): Answer => ({
+export const choice = (value: string, confidence?: number): Answer => ({
   type: "choice",
   choice: value,
+  ...(confidence === undefined ? {} : { confidence }),
 });
 export const score = (value: number): Answer => ({ type: "score", score: value });

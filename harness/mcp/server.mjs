@@ -96,7 +96,7 @@ async function callTool(name, args = {}) {
 
     const questions = packQuestions(effective, args.options);
     const answers = await p.decide(args.state, questions, { model });
-    const decision = applyPolicy(effective, answers);
+    const decision = applyPolicy(effective, answers, { state: args.state });
     return textResult({ pack: pack.id, provider: p.name, decision, answers });
   } catch (error) {
     if (error instanceof ProviderError) {

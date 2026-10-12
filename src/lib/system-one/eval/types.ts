@@ -9,7 +9,8 @@ import type { AggregateStats, DecisionSample } from "../ledger";
 // key — so the eval is reproducible and safe to run in CI alongside the gate.
 //
 // Three packs are covered: file-scope (per-candidate noul + folder choice),
-// workload-forecast (score + two noul) and guard (four noul, protective).
+// workload-forecast (score + two noul) and guard (four hazard noul + a 5-way
+// risk choice, protective).
 
 export type GoldenPackId = "file-scope" | "workload-forecast" | "guard";
 

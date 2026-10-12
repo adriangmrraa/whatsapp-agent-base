@@ -1,0 +1,19 @@
+# ─── JEV cron-triage — a CONFIGURABLE trigger, not a fixed cadence ───────────
+#
+# There is NO hardcoded interval. The number below is an EXAMPLE policy choice
+# (`*/5` = every 5 minutes) — change it to match your workload. A busy service
+# might run every minute; a slow queue every 30. The `triage` pack decides
+# whether the tick actually WAKES an agent, so a fast cadence is cheap: most
+# ticks resolve to SLEEP.
+#
+# Install with:  crontab -e   (then paste one line)
+#
+# Interval trigger (universal: any host with cron):
+*/5 * * * * cd /path/to/repo && JEV_TRIAGE_INTERVAL_MS=300000 JEV_WAKE_CMD='<your wake command>' node harness/hooks/cron-triage/wake.mjs --interval >> /var/log/jev-triage.log 2>&1
+#
+# Notes:
+# - `JEV_TRIAGE_INTERVAL_MS` is informational context for the pack; the actual
+#   cadence is this cron expression.
+# - `JEV_WAKE_CMD` runs only when triage returns a blocking regression.
+# - Event-based equivalent (webhook) is documented in README.md — same script,
+#   invoked with `--event '<json>'` instead of `--interval`.
