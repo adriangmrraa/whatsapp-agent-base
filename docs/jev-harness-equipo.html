@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>JEV Decision Harness — guía para el equipo</title>
+<style>
+  @page { margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: #1a1d23; line-height: 1.55; font-size: 10.5pt; margin: 0;
+    max-width: 820px; margin: 0 auto;
+  }
+  h1 { font-size: 21pt; border-bottom: 3px solid #4f46e5; padding-bottom: 6px; margin-bottom: 4px; }
+  .subtitle { color: #555; margin-top: 0; font-size: 10.5pt; }
+  h2 { font-size: 13.5pt; color: #3730a3; margin-top: 26px; border-bottom: 1px solid #d4d4f0; padding-bottom: 3px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 9.3pt; }
+  th { background: #eef0fb; text-align: left; }
+  th, td { border: 1px solid #c9cde0; padding: 4.5px 7px; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafbfe; }
+  code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.8pt; background: #f0f1f7; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #14161d; color: #d7dce5; padding: 10px 12px; border-radius: 6px; font-size: 8.6pt; overflow-x: auto; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .callout { background: #f5f3ff; border-left: 4px solid #6d5ae0; padding: 8px 12px; margin: 12px 0; }
+  .warn { background: #fff8e6; border-left-color: #d97706; }
+  .verdict-deny { color: #b91c1c; font-weight: 600; }
+  .verdict-ask { color: #b45309; font-weight: 600; }
+  .verdict-allow { color: #15803d; font-weight: 600; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 3px 0; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+  .footer { color: #777; font-size: 8.5pt; margin-top: 26px; border-top: 1px solid #ddd; padding-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>JEV Decision Harness — guía para el equipo</h1>
+<p class="subtitle">Cómo usamos Jev para <strong>construir código</strong> en este repo, cómo se instala en local y qué decide cada actor (Jev vs el LLM del agente).</p>
+
+<h2>1. Qué es (y qué NO es)</h2>
+<p>El <strong>JEV harness</strong> es una capa de decisiones acotadas para el proceso de desarrollo: los agentes de código (codex, opencode, devin, claude, cursor) lo consultan en <strong>momentos de decisión puntuales</strong> mientras programan.</p>
+<p><strong>Jev no escribe código.</strong> Es una API de decisiones que responde con tipos cerrados:</p>
+<table>
+<tr><th>Tipo</th><th>Significado</th><th>Ejemplo</th></tr>
+<tr><td><code>noul</code></td><td>probabilidad 0–1</td><td>"¿qué tan probable es que esto sea destructivo?" → 0.97</td></tr>
+<tr><td><code>choice</code></td><td>elige entre opciones dadas</td><td><code>read_only / local_edit / destructive / external / other</code></td></tr>
+<tr><td><code>score</code></td><td>puntúa candidatos dados</td><td>archivo A: 0.9, archivo B: 0.2</td></tr>
+</table>
+<p>El LLM del agente sigue haciendo <strong>todo</strong> el trabajo creativo: elegir archivos, escribir líneas, diseñar. Jev <strong>juzga, clasifica y aconseja</strong> — nunca genera.</p>
+
+<h2>2. Dos sistemas de decisión (no confundir)</h2>
+<table>
+<tr><th></th><th>A — Dev harness (este doc)</th><th>B — Producción</th></tr>
+<tr><td><strong>Para qué</strong></td><td>agentes codeando</td><td>el bot de WhatsApp en runtime</td></tr>
+<tr><td><strong>Código</strong></td><td><code>src/lib/system-one/{provider,packs,ledger,harness}</code> + <code>harness/</code></td><td><code>src/lib/system-one/{hosted,config,registry,index}.ts</code></td></tr>
+<tr><td><strong>Entrada</strong></td><td>packs + MCP + hooks</td><td><code>decideForTurn()</code> por tenant → <code>/v1/decisions</code></td></tr>
+<tr><td><strong>Config</strong></td><td><code>.env.local</code> (<code>JEV_API_KEY</code>, <code>DECISION_ENGINE</code>)</td><td>columnas <code>agent_config.decision_*</code> por tenant</td></tr>
+</table>
+<p>Son independientes. Que el harness funcione <strong>no</strong> implica tráfico de producción pasando por Jev.</p>
+
+<h2>3. Cuándo se usa Jev — los momentos de decisión</h2>
+<table>
+<tr><th>Momento</th><th>Disparador</th><th>Pack(s)</th><th>Efecto</th></tr>
+<tr><td><strong>Antes de una tool mutadora</strong></td><td>hook <code>PreToolUse</code> (codex) / plugin <code>tool.execute.before</code> (opencode)</td><td><code>guard</code></td><td><code>deny/ask/allow</code> — el LLM propone, Jev <strong>veta</strong></td></tr>
+<tr><td><strong>Cada fase SDD</strong></td><td><code>JEV_HARNESS_SDD=1</code> + <code>shadow-wiring.mts</code></td><td>ver §5</td><td><strong>shadow</strong>: mide y persiste, no actúa</td></tr>
+<tr><td><strong>Consulta voluntaria</strong></td><td>tools MCP <code>jev_*</code> (14)</td><td>cualquiera</td><td>segunda opinión acotada</td></tr>
+<tr><td><strong>Antes de parar</strong> (opc.)</td><td>hook <code>Stop</code></td><td><code>verify</code> + checks.sh</td><td>bloquea el stop si la evidencia no alcanza</td></tr>
+<tr><td><strong>Despertar agente</strong> (opc.)</td><td>cron <code>wake.mjs</code></td><td><code>triage</code></td><td>¿vale levantar un agente por este evento?</td></tr>
+</table>
+
+<h2>4. Qué decide cada uno</h2>
+<table>
+<tr><th>Decisión</th><th>Quién</th></tr>
+<tr><td>Escribir código, elegir líneas, diseñar solución</td><td><strong>LLM</strong> — siempre</td></tr>
+<tr><td>Inventar la lista de archivos candidatos</td><td>LLM</td></tr>
+<tr><td>¿Este comando es destructivo?</td><td><strong>Jev</strong> (<code>guard</code>) — hard rules + 5-way risk</td></tr>
+<tr><td>¿Cuáles de <em>estos</em> candidatos aplican?</td><td>Jev (<code>file-scope</code>, <code>test-impact</code>, <code>skill-route</code>)</td></tr>
+<tr><td>¿Es ambiguo el pedido?</td><td>Jev (<code>ambiguity</code>, noul)</td></tr>
+<tr><td>¿Qué tan grande es el impacto?</td><td>Jev (<code>blast-radius</code>, <code>workload-forecast</code>)</td></tr>
+<tr><td>¿La evidencia cubre el objetivo?</td><td>Jev (<code>verify</code>, <code>acceptance</code>, <code>triage</code>)</td></tr>
+</table>
+<div class="callout"><strong>Ejemplo real</strong> (verificado en vivo, 12-oct):
+<pre><code>rm -rf /                                → <span class="verdict-deny">deny</span>  (hard_rule: rm-rf-root — código, sin modelo)
+git push origin main --delete-old-branches → <span class="verdict-deny">deny</span>  (Jev: destructive, above_threshold)
+git status                              → <span class="verdict-ask">ask</span>   (confianza bajo la banda → pide confirmar)</code></pre>
+</div>
+
+<h2>5. Catálogo de packs y fases SDD</h2>
+<p><code>harness/sdd/shadow-wiring.mts</code> corre estos packs por fase:</p>
+<table>
+<tr><th>Fase SDD</th><th>Packs</th></tr>
+<tr><td>orchestrator</td><td><code>skill-route</code>, <code>context-prime</code></td></tr>
+<tr><td>explore</td><td><code>file-scope</code>, <code>ambiguity</code></td></tr>
+<tr><td>design</td><td><code>file-scope</code>, <code>blast-radius</code></td></tr>
+<tr><td>tasks</td><td><code>workload-forecast</code></td></tr>
+<tr><td>apply</td><td><code>guard</code>, <code>scope-guard</code>, <code>test-impact</code></td></tr>
+<tr><td>verify</td><td><code>acceptance</code>, <code>verify</code>, <code>triage</code></td></tr>
+</table>
+<p>Cada pack define preguntas tipadas (noul/choice/score), umbrales en <code>src/lib/system-one/policy.ts</code> y postura: <strong>closed</strong> (protectivo, fail-closed) u <strong>open</strong> (advisory, fail-open).</p>
+
+<h2>6. El Gate PreToolUse en detalle</h2>
+<p><code>harness/hooks/gate-pretool.mjs</code> corre el pack <code>guard</code> antes de cada tool mutadora (<code>bash</code>, <code>write</code>, <code>edit</code>, <code>patch</code>, <code>multiedit</code>, <code>exec</code>…):</p>
+<ol>
+<li><strong>Hard rules en código primero</strong> — <code>rm -rf /</code>, <code>git push --force</code>, pipe a <code>sh</code>/<code>bash</code> → <span class="verdict-deny">deny</span> sin consultar al modelo.</li>
+<li><strong>Jev clasifica el riesgo</strong> en 5 categorías.</li>
+<li><strong>Mapeo</strong>: <code>destructive</code> → deny · <code>external</code> → ask · <code>read_only</code>/<code>local_edit</code> con confianza ≥ banda → allow · resto → ask.</li>
+</ol>
+<p><strong>Posturas de fallo</strong> (diseño deliberado):</p>
+<table>
+<tr><th>Situación</th><th>Resultado</th></tr>
+<tr><td>Sin provider (<code>rules</code>, sin key)</td><td>hard-rules-only; permite el resto (usable offline)</td></tr>
+<tr><td>Provider configurado pero falla</td><td><span class="verdict-ask">ask</span> (fail-closed — nunca allow ciego)</td></tr>
+<tr><td>Hard rule matchea</td><td><span class="verdict-deny">deny</span> autoritativo, aunque Jev esté caído</td></tr>
+</table>
+
+<h2>7. Shadow → ledger → promoción</h2>
+<p>Los packs <strong>nacen en shadow</strong>: corren, se miden y se persisten, pero nada actúa sobre su respuesta. El <code>ShadowLedger</code> guarda <code>DecisionSample</code>s en Engram bajo <code>sdd/&lt;change&gt;/decisions/&lt;phase&gt;</code> (provider, latencia, tokens, costo).</p>
+<p><code>scripts/jev-report.ts</code> (baseline vs +Jev A/B) es el gate de promoción: cuando los samples reales muestren que un pack gana su lugar, pasa de shadow a activo. Hasta entonces, <strong>advisory only</strong>.</p>
+<div class="callout warn">Estado honesto: hoy el único path que <strong>actúa</strong> sobre la respuesta es el Gate (§6). El resto es medición.</div>
+
+<h2>8. Instalación local</h2>
+<p><strong>Prerequisitos:</strong> Node + <code>npm install</code>, Git Bash en PATH (Windows), y <code>.env.local</code> con:</p>
+<pre><code>JEV_API_KEY=ts_...            # key de Jev (server-side, nunca en configs)
+DECISION_ENGINE=jev
+DECISION_PROVIDER=jev
+JEV_HARNESS_SDD=1             # habilita packs shadow en fases SDD
+JEV_MEMORY=local              # local|engram | cloud | neon | none
+ENGRAM_HTTP_URL=http://127.0.0.1:7437
+JEV_MEMORY_PROJECT=whatsapp-agent-base</code></pre>
+
+<p><strong>Paso 1 — skill <code>jev-decide</code></strong> (le enseña al agente CUÁNDO consultar):</p>
+<pre><code>bash harness/install.sh --agent codex      # → .agents/skills/
+bash harness/install.sh --agent opencode   # → .opencode/skills/
+# opcional: --global para todos los proyectos</code></pre>
+
+<p><strong>Paso 2 — MCP server <code>jev-harness</code></strong> (las 14 tools <code>jev_*</code>). El wrapper carga <code>.env.local</code> — la key nunca va en el config:</p>
+<pre><code>bash -lc 'cd "&lt;REPO&gt;" &amp;&amp; set -a &amp;&amp; . ./.env.local 2&gt;/dev/null; set +a; exec node harness/mcp/server.mjs'</code></pre>
+<table>
+<tr><th>Agente</th><th>Dónde registrar</th></tr>
+<tr><td>opencode</td><td><code>opencode.json</code> → <code>mcp.jev-harness</code> (ya está en este repo)</td></tr>
+<tr><td>codex</td><td><code>~/.codex/config.toml</code> → <code>[mcp_servers.jev-harness]</code></td></tr>
+<tr><td>devin</td><td><code>mcp_config.json</code> → <code>mcpServers.jev-harness</code></td></tr>
+<tr><td>claude</td><td><code>claude mcp add jev-harness -- bash -lc '&lt;wrapper&gt;'</code></td></tr>
+<tr><td>cursor</td><td><code>.cursor/mcp.json</code></td></tr>
+</table>
+
+<p><strong>Paso 3 — el Gate</strong> (consumo automático real):</p>
+<table>
+<tr><th>Agente</th><th>Instalación</th></tr>
+<tr><td><strong>opencode</strong></td><td><code>opencode.json</code> → <code>"plugin": ["file:///&lt;REPO&gt;/harness/hooks/opencode-plugin.mjs"]</code></td></tr>
+<tr><td><strong>codex</strong></td><td><code>~/.codex/hooks.json</code> → entrada <code>PreToolUse</code> con <code>command: jev-gate.cmd</code> (wrapper → <code>gate-pretool.mjs</code>)</td></tr>
+<tr><td><strong>claude code</strong></td><td>mergear <code>harness/hooks/claude-hooks.json</code> en <code>.claude/settings.json</code></td></tr>
+<tr><td><strong>devin</strong></td><td>sin hook local — usa las tools MCP <code>jev_*</code></td></tr>
+</table>
+<p>Matcher recomendado (codex): <code>Bash|Write|Edit|MultiEdit|Patch|apply_patch|exec|exec_command|shell</code></p>
+
+<p><strong>Paso 4 — verificar:</strong></p>
+<pre><code># tools MCP (14)
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node harness/mcp/server.mjs
+
+# gate en vivo (con env cargado)
+node harness/hooks/gate-pretool.mjs --tool Bash --state "rm -rf /"    # → deny
+node harness/hooks/gate-pretool.mjs --tool Bash --state "git status"  # → allow|ask (Jev real)
+
+# shadow packs por fase SDD
+npx tsx harness/sdd/shadow-wiring.mts --change demo --phase apply --task "test"
+
+# tests
+npm test                                                          # 155 tests TS
+node --test harness/hooks/hooks.test.mjs harness/mcp/mcp.test.mjs</code></pre>
+<p><code>engine=jev</code> en la salida del shadow-wiring = la key está pegando a la API real; <code>engine=rules</code> = cayó a fallback (revisar key/red).</p>
+
+<h2>9. Estado actual + gaps conocidos</h2>
+<ul>
+<li><strong>Instalado y verificado en vivo</strong>: gate en codex + plugin en opencode + MCP en los tres agentes + shadow SDD habilitado.</li>
+<li><strong>Gap #1 (del audit)</strong>: <code>DecisionSample</code> no tiene <code>agent</code>/<code>sessionId</code> y el MCP server no escribe samples — la atribución por agente aún no es demostrable por construcción.</li>
+<li><strong>Gate conservador</strong>: comandos seguros pueden devolver <code>ask</code> (confianza bajo banda). Si es ruidoso: achicar el matcher a <code>Bash</code> o subir la banda de <code>local_edit</code> en <code>policy.ts</code>.</li>
+<li><strong>No instalado</strong>: Stop hook y cron-triage (opcionales; requieren scheduler).</li>
+</ul>
+
+<h2>10. FAQ rápido</h2>
+<p><strong>¿Jev elige qué archivos tocar?</strong> — Puntúa candidatos que el LLM le propone (<code>file-scope</code>), hoy solo en shadow. No inventa ni edita archivos.</p>
+<p><strong>¿Jev escribe líneas de código?</strong> — Nunca. No genera texto libre.</p>
+<p><strong>¿Qué pasa si Jev está caído?</strong> — Gate: hard rules siguen negando + el resto pasa a <code>ask</code>. Shadow: sample con <code>error</code>, nada se bloquea.</p>
+<p><strong>¿Cuánto cuesta?</strong> — ~$0.00001 por decisión (245 tokens in / 39 out, ~300 ms, medido en vivo).</p>
+<p><strong>¿Puedo usarlo sin Jev (offline)?</strong> — Sí: <code>DECISION_ENGINE=rules</code> degrada a hard-rules-only; el harness sigue siendo utilizable.</p>
+
+<div class="footer">
+Refs: <code>docs/jev-harness.md</code> (canonical) · <code>docs/jev-harness-ledger.md</code> (metodología) · <code>docs/jev-harness-usage-audit.md</code> (audit forense) · <code>harness/hooks/README.md</code> · <code>harness/AGENTS.md</code>
+</div>
+
+</body>
+</html>
